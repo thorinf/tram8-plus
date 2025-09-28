@@ -10,6 +10,7 @@ Checks: >
   cppcoreguidelines-*,
   hicpp-*,
   concurrency-*,
+  -readability-identifier-length,
   -readability-identifier-naming,
   -readability-braces-around-statements,
   -readability-magic-numbers,
