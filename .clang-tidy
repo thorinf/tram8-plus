@@ -1,0 +1,38 @@
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  misc-*,
+  cppcoreguidelines-*,
+  hicpp-*,
+  concurrency-*,
+  -readability-identifier-naming,
+  -readability-braces-around-statements,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-c-arrays,
+  -hicpp-avoid-c-arrays,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -hicpp-no-array-decay,
+  -misc-non-private-member-variables-in-classes
+
+FormatStyle: file
+HeaderFilterRegex: '.*'
+InheritParentConfig: true
+
+CheckOptions:
+  - key: modernize-use-nullptr.NullMacros
+    value: 'NULL'
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: '1'
+  - key: readability-implicit-bool-conversion.AllowIntegerConditions
+    value: 'true'
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: 'true'

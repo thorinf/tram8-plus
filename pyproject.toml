@@ -1,0 +1,25 @@
+[project]
+name = "tram8-plus"
+version = "0.1.0"
+description = "Enhanced TRAM8 eurorack synthesizer firmware"
+requires-python = ">=3.10"
+dependencies = [
+    "intelhex>=2.3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+    "ruff>=0.13.2",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "UP", "B"]
+ignore = ["E501", "B008", "B007"]
+
+[tool.ruff.format]
+quote-style = "double"

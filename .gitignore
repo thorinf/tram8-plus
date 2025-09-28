@@ -1,0 +1,39 @@
+# Build artifacts
+firmware/build/
+build/
+*.hex
+*.elf
+*.o
+*.syx
+*_linear.hex
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+*.egg-info/
+dist/
+build/
+uv.lock
+.python-version
+pyrightconfig.json
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development tools
+compile_commands.json
+.cache/
+
+# Temporary files
+*.tmp
+*.bak
