@@ -8,7 +8,7 @@ static inline uint8_t data_need(uint8_t s) {
 
 void midi_parser_init(MidiParser *p) { p->running = p->curr = p->need = p->have = p->d1_tmp = p->desync = 0; }
 
-static inline void midi_parser_force_desync(MidiParser *p) {
+void midi_parser_force_desync(MidiParser *p) {
   p->running = 0;
   p->curr = 0;
   p->need = 0;
