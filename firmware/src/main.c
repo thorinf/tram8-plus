@@ -33,8 +33,8 @@ ISR(USART_RXC_vect) {
 }
 
 static inline uint8_t rb_pop(uint8_t *out) {
+  if (rb_tail == rb_head) return 0;
   uint8_t tail = rb_tail;
-  if (tail == rb_head) return 0;
   *out = rb[tail];
   rb_tail = (tail + 1) & RB_MASK;
   return 1;
@@ -49,6 +49,11 @@ int main(void) {
   sei();
 
   for (;;) {
+    if (rb_tail == rb_head && rb_overflow) {
+      midi_parser_force_desync(&parser);
+      rb_overflow = 0;
+    }
+
     uint8_t byte;
     if (rb_pop(&byte)) {
       MidiMsg msg;
