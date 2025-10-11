@@ -25,11 +25,12 @@ ISR(USART_RXC_vect) {
   uint8_t next = (head + 1) & RB_MASK;
 
   if (next == rb_tail) {
+    head = rb_tail = 0;
+    next = 1;
     rb_overflow = 1;
-  } else {
-    rb[head] = byte;
-    rb_head = next;
   }
+  rb[head] = byte;
+  rb_head = next;
 }
 
 static inline uint8_t rb_pop(uint8_t *out) {
@@ -49,6 +50,7 @@ int main(void) {
   sei();
 
   for (;;) {
+    uint8_t head = rb_head;
     if (rb_tail == rb_head && rb_overflow) {
       midi_parser_force_desync(&parser);
       rb_overflow = 0;
