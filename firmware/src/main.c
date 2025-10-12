@@ -1,5 +1,6 @@
 #include "hardware_config.h"
 #include "midi_parser.h"
+#include "gpio.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdint.h>
@@ -42,26 +43,7 @@ static inline uint8_t rb_pop(uint8_t *out) {
   return 1;
 }
 
-static inline void gate_set(uint8_t gate_index, uint8_t state) {
-  volatile uint8_t *port_reg;
-  uint8_t mask;
-
-  if (gate_index == 0) {
-    port_reg = &GATE_PORT_B;
-    mask = (uint8_t)(1 << GATE_PIN_0);
-  } else {
-    port_reg = &GATE_PORT_D;
-    mask = (uint8_t)(1 << (GATE_PIN_1 + gate_index - 1));
-  }
-
-  if (state) {
-    *port_reg |= mask;
-  } else {
-    *port_reg &= (uint8_t)~mask;
-  }
-}
-
-static inline void gate_wipe(void) {
+static void gate_wipe(void) {
   for (uint8_t i = 0; i < NUM_GATES; i++) {
     gate_set(i, 1);
     _delay_ms(50);
@@ -82,9 +64,7 @@ static void handle_midi_message(const MidiMsg *msg) {
 }
 
 int main(void) {
-  GATE_DDR_B |= (1 << GATE_PIN_0); // Set PB0 as output
-  GATE_DDR_D |= 0xFE;              // Set PD1 to PD7 as outputs
-
+  gpio_init();
   gate_wipe();
 
   USART_Init(MY_UBRR);
