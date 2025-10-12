@@ -1,6 +1,6 @@
+#include "gpio.h"
 #include "hardware_config.h"
 #include "midi_parser.h"
-#include "gpio.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdint.h>
@@ -65,7 +65,10 @@ static void handle_midi_message(const MidiMsg *msg) {
 
 int main(void) {
   gpio_init();
+  led_init();
+  led_on();
   gate_wipe();
+  led_off();
 
   USART_Init(MY_UBRR);
 

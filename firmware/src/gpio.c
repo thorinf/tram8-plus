@@ -1,4 +1,6 @@
 #include "gpio.h"
+
+#include <avr/eeprom.h>
 #include <avr/io.h>
 
 void gpio_init(void) {
@@ -6,8 +8,30 @@ void gpio_init(void) {
   DDRD |= 0xFE;       // Set PD1 to PD7 as outputs
 }
 
+void led_init(void) {
+  DDRC |= (1 << LED_PIN);
+  led_off();
+}
+
+void led_on(void) { LED_PORT &= ~(1 << LED_PIN); }
+
+void led_off(void) { LED_PORT |= (1 << LED_PIN); }
+
+uint8_t read_button(void) { return BUTTON_PIN_REG & (1 << BUTTON_PIN); }
+
+void button_init(void) {
+  // This is to match original codebase, true case ought to be default
+  while (!eeprom_is_ready())
+    ;
+  if (eeprom_read_byte((uint8_t *)EEPROM_BUTTON_FIX_ADDR) == 0xAA) {
+    BUTTON_DDR &= ~(1 << BUTTON_PIN);
+  } else {
+    BUTTON_DDR |= ~(1 << BUTTON_PIN);
+  }
+}
+
 void gate_set(uint8_t gate_index, uint8_t state) {
-  if (gate_index >= 8) { return; }
+  if (gate_index >= NUM_GATES) { return; }
 
   volatile uint8_t *port_reg;
   uint8_t mask;
