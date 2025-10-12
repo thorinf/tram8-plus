@@ -61,6 +61,14 @@ static inline void gate_set(uint8_t gate_index, uint8_t state) {
   }
 }
 
+static inline void gate_wipe(void) {
+  for (uint8_t i = 0; i < NUM_GATES; i++) {
+    gate_set(i, 1);
+    _delay_ms(50);
+    gate_set(i, 0);
+  }
+}
+
 static void handle_midi_message(const MidiMsg *msg) {
   uint8_t status = msg->status & 0xF0;
   uint8_t note = msg->d1;
@@ -77,14 +85,7 @@ int main(void) {
   GATE_DDR_B |= (1 << GATE_PIN_0); // Set PB0 as output
   GATE_DDR_D |= 0xFE;              // Set PD1 to PD7 as outputs
 
-  // Gate wipe on boot - turn all gates on then off to verify they work
-  for (uint8_t i = 0; i < NUM_GATES; i++) {
-    gate_set(i, 1);
-  }
-  _delay_ms(100);
-  for (uint8_t i = 0; i < NUM_GATES; i++) {
-    gate_set(i, 0);
-  }
+  gate_wipe();
 
   USART_Init(MY_UBRR);
 
