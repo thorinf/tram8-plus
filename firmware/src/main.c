@@ -77,17 +77,9 @@ static void handle_midi_message(const MidiMsg *msg) {
   }
 }
 
-int main(void) {
-  gpio_init();
-  gate_wipe();
-
-  USART_Init(MY_UBRR);
-  Timer_Init();
-
+static void play_mode_loop(void) {
   MidiParser parser;
   midi_parser_init(&parser);
-
-  sei();
 
   for (;;) {
     uint8_t head = rb_head;
@@ -107,15 +99,24 @@ int main(void) {
       timer_ticks = 0;
       button_update(&learn_button, ticks);
 
-      if (learn_button.state == BUTTON_HELD) {
-        if (learn_led.state == LED_OFF) {
-          learn_led.state = LED_ON;
-        } else {
-          learn_led.state = LED_OFF;
-        }
-      }
-
-      led_update(&learn_led, ticks);
+      if (learn_button.state == BUTTON_HELD) { return; }
     }
+  }
+}
+
+static void menu_mode_loop(void) { return; }
+
+int main(void) {
+  gpio_init();
+  gate_wipe();
+
+  USART_Init(MY_UBRR);
+  Timer_Init();
+
+  sei();
+
+  for (;;) {
+    play_mode_loop();
+    menu_mode_loop();
   }
 }
