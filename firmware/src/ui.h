@@ -3,9 +3,7 @@
 
 #include <stdint.h>
 
-#ifndef TIMER_TICK_MS
-#define TIMER_TICK_MS 1
-#endif
+#include "hardware_config.h"
 
 #define DEBOUNCE_MS 20     // 20ms debounce time
 #define LONG_PRESS_MS 2000 // 2 second long press
@@ -16,7 +14,14 @@
 #define LED_BLINK2_TICKS (100 / TIMER_TICK_MS)
 #define LED_BLINK3_TICKS (50 / TIMER_TICK_MS)
 
-typedef enum { BUTTON_IDLE = 0, BUTTON_DEBOUNCING, BUTTON_DOWN, BUTTON_PRESSED, BUTTON_HELD } button_state_t;
+typedef enum {
+  BUTTON_IDLE = 0,
+  BUTTON_DEBOUNCING,
+  BUTTON_DOWN,
+  BUTTON_PRESSED,
+  BUTTON_HELD,
+  BUTTON_HELD_WAIT_RELEASE
+} button_state_t;
 
 typedef enum { LED_OFF = 0, LED_ON, LED_BLINK1, LED_BLINK2, LED_BLINK3 } led_state_t;
 
@@ -36,5 +41,4 @@ typedef struct {
 
 void button_update(button_t *button, uint8_t ticks);
 void led_update(led_t *led, uint8_t ticks);
-
 #endif

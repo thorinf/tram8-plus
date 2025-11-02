@@ -23,14 +23,27 @@ void button_update(button_t *button, uint8_t ticks) {
       button->state = BUTTON_PRESSED;
     } else {
       button->ticks += ticks;
-      if (button->ticks >= LONG_PRESS_TICKS) { button->state = BUTTON_HELD; }
+      if (button->ticks >= LONG_PRESS_TICKS) {
+        button->state = BUTTON_HELD;
+        button->ticks = 0;
+      }
     }
     break;
 
   case BUTTON_PRESSED:
-  case BUTTON_HELD:
     button->state = BUTTON_IDLE;
     button->ticks = 0;
+    break;
+
+  case BUTTON_HELD:
+    button->state = BUTTON_HELD_WAIT_RELEASE;
+    break;
+
+  case BUTTON_HELD_WAIT_RELEASE:
+    if (!current_reading) {
+      button->state = BUTTON_IDLE;
+      button->ticks = 0;
+    }
     break;
   }
 }
