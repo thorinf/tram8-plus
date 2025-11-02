@@ -1,6 +1,7 @@
 #include "gpio.h"
 #include "hardware_config.h"
 #include "midi_parser.h"
+#include "ui.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdint.h>
@@ -13,12 +14,23 @@ static volatile uint8_t rb[RB_SIZE];
 static volatile uint8_t rb_head = 0;
 static volatile uint8_t rb_tail = 0;
 static volatile uint8_t rb_overflow = 0;
+static volatile uint8_t timer_ticks = 0;
+
+static button_t learn_button = {BUTTON_IDLE, 0, read_button};
+static led_t learn_led = {LED_OFF, 0, 0, led_on, led_off};
 
 void USART_Init(unsigned int ubrr) {
   UBRRH = (unsigned char)(ubrr >> 8);
   UBRRL = (unsigned char)ubrr;
   UCSRB = (1 << RXEN) | (1 << RXCIE);
   UCSRC = (1 << URSEL) | (1 << UCSZ1) | (1 << UCSZ0);
+}
+
+void Timer_Init(void) {
+  TCCR2 = (1 << WGM21) | (1 << CS22);
+  OCR2 = TIMER_OCR;
+  TCNT2 = 0;
+  TIMSK |= (1 << OCIE2);
 }
 
 ISR(USART_RXC_vect) {
@@ -34,6 +46,8 @@ ISR(USART_RXC_vect) {
   rb[head] = byte;
   rb_head = next;
 }
+
+ISR(TIMER2_COMP_vect) { timer_ticks++; }
 
 static inline uint8_t rb_pop(uint8_t *out) {
   if (rb_tail == rb_head) return 0;
@@ -65,12 +79,10 @@ static void handle_midi_message(const MidiMsg *msg) {
 
 int main(void) {
   gpio_init();
-  led_init();
-  led_on();
   gate_wipe();
-  led_off();
 
   USART_Init(MY_UBRR);
+  Timer_Init();
 
   MidiParser parser;
   midi_parser_init(&parser);
@@ -89,6 +101,21 @@ int main(void) {
       MidiMsg msg;
       if (midi_parse(&parser, byte, &msg)) { handle_midi_message(&msg); }
     }
+
+    if (timer_ticks) {
+      uint8_t ticks = timer_ticks;
+      timer_ticks = 0;
+      button_update(&learn_button, ticks);
+
+      if (learn_button.state == BUTTON_HELD) {
+        if (learn_led.state == LED_OFF) {
+          learn_led.state = LED_ON;
+        } else {
+          learn_led.state = LED_OFF;
+        }
+      }
+
+      led_update(&learn_led, ticks);
+    }
   }
-  return 0;
 }
