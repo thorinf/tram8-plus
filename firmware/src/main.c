@@ -104,7 +104,47 @@ static void play_mode_loop(void) {
   }
 }
 
-static void menu_mode_loop(void) { return; }
+static void menu_mode_loop(void) {
+  uint8_t menu_index = 0;
+  for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
+    gate_set(gate, gate == menu_index);
+  }
+
+  for (;;) {
+    if (!timer_ticks) { continue; }
+
+    uint8_t ticks = timer_ticks;
+    timer_ticks = 0;
+    button_update(&learn_button, ticks);
+
+    if (learn_button.state == BUTTON_PRESSED) {
+      menu_index = (uint8_t)((menu_index + 1) % 4);
+      for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
+        gate_set(gate, gate == menu_index);
+      }
+    }
+
+    if (learn_button.state == BUTTON_HELD) {
+      switch (menu_index) {
+      case 0:
+        break; // exit
+      case 1:
+        break; // placeholder
+      case 2:
+        break; // placeholder
+      case 3:
+        break; // placeholder
+      default:
+        break;
+      }
+
+      for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
+        gate_set(gate, 0);
+      }
+      return;
+    }
+  }
+}
 
 int main(void) {
   gpio_init();
