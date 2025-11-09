@@ -1,9 +1,11 @@
 #include "gpio.h"
 #include "hardware_config.h"
+#include "midi_mapper.h"
 #include "midi_parser.h"
 #include "ui.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <util/delay.h>
 
@@ -65,15 +67,43 @@ static void gate_wipe(void) {
   }
 }
 
-static void handle_midi_message(const MidiMsg *msg) {
-  uint8_t status = msg->status & 0xF0;
-  uint8_t note = msg->d1;
-  uint8_t velocity = msg->d2;
+static inline uint8_t pop_lsb(uint8_t *mask) {
+  uint8_t value = *mask;
+  uint8_t gate = 0;
+  while (((value >> gate) & 1u) == 0u) {
+    ++gate;
+  }
+  *mask = (uint8_t)(value & (value - 1));
+  return gate;
+}
 
-  if ((status == 0x90 || status == 0x80) && note >= 24 && note <= 31) {
-    uint8_t gate_index = note - 24; // 0-7
-    uint8_t gate_state = (status == 0x90 && velocity > 0) ? 1 : 0;
-    gate_set(gate_index, gate_state);
+static void handle_midi_message(const MidiMsg *msg) {
+  const uint8_t status = msg->status & 0xF0;
+  const uint8_t channel = msg->status & 0x0F;
+  const uint8_t data1 = msg->d1;
+  const uint8_t data2 = msg->d2;
+
+  uint8_t gate_candidates;
+
+  switch (status) {
+  case 0x90: // note on
+    gate_candidates = midi_mapper_gate_mask(channel, data1);
+    while (gate_candidates) {
+      uint8_t gate_index = pop_lsb(&gate_candidates);
+      gate_set(gate_index, data2 ? 1 : 0);
+    }
+    break;
+  case 0x80: // note off
+    gate_candidates = midi_mapper_gate_mask(channel, data1);
+    while (gate_candidates) {
+      uint8_t gate_index = pop_lsb(&gate_candidates);
+      gate_set(gate_index, 0);
+    }
+    break;
+  case 0xB0: // cc
+    break;
+  default:
+    break;
   }
 }
 
@@ -154,6 +184,12 @@ int main(void) {
   Timer_Init();
 
   sei();
+
+  MidiMapper *map = midi_mapper_get_map();
+  for (uint8_t i = 0; i < NUM_GATES; ++i) {
+    map->slot[i] = midi_mapper_velo[i];
+  }
+  midi_mapper_rebuild_masks();
 
   for (;;) {
     play_mode_loop();
