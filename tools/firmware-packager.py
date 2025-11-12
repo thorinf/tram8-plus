@@ -6,57 +6,79 @@ from pathlib import Path
 from intelhex import IntelHex
 
 
-def package_firmware(hex_path: Path, output_dir: Path = None) -> Path:
-    """Package Intel HEX firmware into TRAM8 SysEx format for MIDI updates."""
+def package_firmware(hex_path: Path, output_dir: Path = None, verbose: bool = False) -> Path:
+    """Package Intel HEX firmware into TRAM8 SysEx format for MIDI updates.
+
+    Args:
+        hex_path: Path to input Intel HEX file
+        output_dir: Output directory (defaults to same as input)
+        verbose: Enable verbose output
+
+    Returns:
+        Path to generated SysEx file
+    """
 
     if output_dir is None:
         output_dir = hex_path.parent
 
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    BOOTLOADER_START = 0x1C00  # ATmega8A boot section start (1 KB bootloader)
+    LINES_PER_PAGE = 4
+    PAGE_SIZE = 16 * LINES_PER_PAGE
+
     ih = IntelHex()
+    ih.padding = 0xFF
     ih.loadhex(str(hex_path))
 
-    bootloader_start = 0xE000
-    lines_per_page = 4
+    defined_addresses = ih.addresses()
+    if not defined_addresses:
+        raise ValueError("No firmware data found in HEX file")
 
-    last_addr = max(i for i in range(bootloader_start) if ih[i] != 255)
-    num_pages = int(round(last_addr / (16 * lines_per_page) + 0.5))
+    first_overrun = next((addr for addr in defined_addresses if addr >= BOOTLOADER_START), None)
+    if first_overrun is not None:
+        raise ValueError(f"Firmware exceeds bootloader boundary: 0x{first_overrun:X} >= 0x{BOOTLOADER_START:X}")
 
-    # Validate firmware doesn't exceed bootloader boundary
-    max_pages = bootloader_start // (16 * lines_per_page)
-    if num_pages > max_pages:
-        raise ValueError(
-            f"Firmware too large: {num_pages} pages exceeds maximum {max_pages} pages "
-            f"(bootloader starts at 0x{bootloader_start:X})"
-        )
+    last_addr = max(defined_addresses)
 
-    # Add free page if space available
-    if last_addr < (bootloader_start - 1):
-        num_pages += 1
-        for i in range(16 * lines_per_page):
-            last_addr += 1
-            ih[last_addr] = 0
+    num_pages = (last_addr + 1 + PAGE_SIZE - 1) // PAGE_SIZE
+    total_length = num_pages * PAGE_SIZE
 
-    total_length = num_pages * 16 * lines_per_page
+    if verbose:
+        print(f"Bootloader start: 0x{BOOTLOADER_START:X}")
+        print(f"Last used address: 0x{last_addr:X}")
+        print(f"Firmware size: {last_addr + 1} bytes")
+        print(f"Pages required: {num_pages}")
+        print(f"Total length: {total_length} bytes")
+
+    linear_ih = IntelHex()
+    linear_ih.padding = 0xFF
+    for addr in range(total_length):
+        linear_ih[addr] = ih[addr]
 
     linear_path = output_dir / f"{hex_path.stem}_linear.hex"
-    with open(linear_path, "w") as f:
-        ih[0:total_length].write_hex_file(f)
+    with open(linear_path, "w", newline="\r\n", encoding="ascii") as f:
+        linear_ih.write_hex_file(f, byte_count=16)
 
     sysex_path = output_dir / f"{hex_path.stem}_firmware.syx"
 
-    sysex_start = bytes.fromhex("F000297F")  # SysEx start + LPZW manufacturer ID
+    sysex_start = bytes.fromhex("F000297F")
     firmware_id = b"T8FW"
     version_byte = b"\x00"
     sysex_end = bytes.fromhex("3A303030303030303146460D0AF7")
-    timing_padding = b"\x00" * 451  # Inter-page delay for flash timing
+    timing_padding = b"\x00" * 451
 
-    with open(linear_path) as hex_file, open(sysex_path, "wb") as sysex_file:
+    # newline="" keeps CRLF pairs intact when feeding the SysEx payload
+    with open(linear_path, encoding="ascii", newline="") as hex_file, open(sysex_path, "wb") as sysex_file:
         sysex_file.write(sysex_start + firmware_id + version_byte)
 
         for page in range(num_pages):
             sysex_file.write(timing_padding)
-            for _ in range(lines_per_page):
+            for _ in range(LINES_PER_PAGE):
                 hex_line = hex_file.readline()
+                if not hex_line:
+                    raise ValueError(f"Linear HEX file ended unexpectedly at page {page}")
+                # Intel HEX is ASCII, so UTF-8 encoding is safe for the SysEx stream
                 sysex_file.write(hex_line.encode("utf-8"))
 
         sysex_file.write(timing_padding + sysex_end)
@@ -79,10 +101,9 @@ def main():
         parser.error(f"Expected .hex file, got: {args.hex_file.suffix}")
 
     try:
-        sysex_path = package_firmware(args.hex_file, args.output_dir)
+        sysex_path = package_firmware(args.hex_file, args.output_dir, args.verbose)
 
         if args.verbose:
-            print(f"Packaged firmware: {args.hex_file}")
             print(f"Generated SysEx: {sysex_path}")
         else:
             print(f"Created: {sysex_path.name}")
