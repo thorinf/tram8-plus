@@ -6,7 +6,7 @@
 
 #define MAX5825_ADDR 0x20
 #define MAX5825_REG_REF 0x20
-#define MAX5825_REG_CODEn_LOADall 0xA0
+#define MAX5825_REG_CODE_ALL_LOAD_ALL 0xC2
 #define MAX5825_REG_CODEn_LOADn 0xB0
 
 static inline void max5825_init(void) {
@@ -20,7 +20,7 @@ static inline void max5825_init(void) {
 
   twi_start();
   twi_write(MAX5825_ADDR); // Device address with write bit
-  twi_write(MAX5825_REG_CODEn_LOADall);
+  twi_write(MAX5825_REG_CODE_ALL_LOAD_ALL);
   twi_write(0x00);
   twi_write(0x00);
   twi_stop();
