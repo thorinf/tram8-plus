@@ -42,9 +42,8 @@ ISR(USART_RXC_vect) {
   uint8_t next = (head + 1) & RB_MASK;
 
   if (next == rb_tail) {
-    head = rb_tail = 0;
-    next = 1;
     rb_overflow = 1;
+    return; // Drop byte
   }
   rb[head] = byte;
   rb_head = next;
