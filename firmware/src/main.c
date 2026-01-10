@@ -7,6 +7,7 @@
 #include <avr/io.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <util/atomic.h>
 #include <util/delay.h>
 
 #define RB_SIZE 64
@@ -112,10 +113,11 @@ static void play_mode_loop(void) {
   midi_parser_init(&parser);
 
   for (;;) {
-    uint8_t head = rb_head;
-    if (rb_tail == rb_head && rb_overflow) {
+    uint8_t overflow;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { overflow = rb_overflow; }
+    if (rb_tail == rb_head && overflow) {
       midi_parser_force_desync(&parser);
-      rb_overflow = 0;
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { rb_overflow = 0; }
     }
 
     uint8_t byte;
@@ -124,9 +126,12 @@ static void play_mode_loop(void) {
       if (midi_parse(&parser, byte, &msg)) { handle_midi_message(&msg); }
     }
 
-    if (timer_ticks) {
-      uint8_t ticks = timer_ticks;
+    uint8_t ticks;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ticks = timer_ticks;
       timer_ticks = 0;
+    }
+    if (ticks) {
       button_update(&learn_button, ticks);
 
       if (learn_button.state == BUTTON_HELD) { return; }
@@ -141,10 +146,13 @@ static void menu_mode_loop(void) {
   }
 
   for (;;) {
-    if (!timer_ticks) { continue; }
+    uint8_t ticks;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ticks = timer_ticks;
+      timer_ticks = 0;
+    }
+    if (!ticks) { continue; }
 
-    uint8_t ticks = timer_ticks;
-    timer_ticks = 0;
     button_update(&learn_button, ticks);
 
     if (learn_button.state == BUTTON_PRESSED) {
@@ -184,12 +192,6 @@ int main(void) {
   Timer_Init();
 
   sei();
-
-  MidiMapper *map = midi_mapper_get_map();
-  for (uint8_t i = 0; i < NUM_GATES; ++i) {
-    map->slot[i] = midi_mapper_velo[i];
-  }
-  midi_mapper_rebuild_masks();
 
   for (;;) {
     play_mode_loop();
