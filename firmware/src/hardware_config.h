@@ -37,6 +37,12 @@
 #define CLR_PORT PORTC
 #define CONTROL_DDR DDRC
 
+// Hardware version detection pin
+#define VERSION_PIN PB1
+#define VERSION_DDR DDRB
+#define VERSION_PORT PORTB
+#define VERSION_PIN_REG PINB
+
 // EEPROM configuration
 #define EEPROM_BUTTON_FIX_ADDR 0x07
 #define EEPROM_MIDIMAP_ADDR 0x101
