@@ -6,6 +6,7 @@
 #include "midi_parser.h"
 #include "twi_control.h"
 #include "ui.h"
+#include <avr/eeprom.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdbool.h>
@@ -23,6 +24,11 @@ static volatile uint8_t rb_overflow = 0;
 static volatile uint8_t timer_ticks = 0;
 
 static button_t learn_button = {BUTTON_IDLE, 0, read_button};
+static uint8_t module_mode = MODE_VELOCITY;
+
+static void handle_velocity(const MidiMsg *msg);
+static void handle_cc(const MidiMsg *msg);
+static void (*handle_midi_message)(const MidiMsg *msg) = handle_velocity;
 
 void USART_Init(unsigned int ubrr) {
   UBRRH = (unsigned char)(ubrr >> 8);
@@ -79,26 +85,35 @@ static inline uint8_t pop_lsb(uint8_t *mask) {
   return gate;
 }
 
-static void handle_midi_message(const MidiMsg *msg) {
+static void set_mode(uint8_t mode) {
+  module_mode = mode;
+  handle_midi_message = (mode == MODE_CC) ? handle_cc : handle_velocity;
+  for (uint8_t i = 0; i < NUM_GATES; ++i) {
+    gate_set(i, 0);
+    max5825_write(i, 0);
+  }
+}
+
+static void handle_velocity(const MidiMsg *msg) {
   const uint8_t status = msg->status & 0xF0;
   const uint8_t channel = msg->status & 0x0F;
   const uint8_t note = msg->d1;
   const uint8_t velocity = msg->d2;
 
+  if (learn_is_active()) {
+    if (status == 0x90 && velocity > 0) {
+      if (g_learn.gate == 0) { midi_mapper_set_channel(channel); }
+      learn_on_note(note);
+    }
+    return;
+  }
+
+  if (channel != midi_mapper_get_channel()) { return; }
+
   uint8_t gate_candidates;
 
   switch (status) {
   case 0x90:
-    if (learn_is_active()) {
-      if (velocity > 0) {
-        if (g_learn.gate == 0) { midi_mapper_set_channel(channel); }
-        learn_on_note(note);
-      }
-      return;
-    }
-
-    if (channel != midi_mapper_get_channel()) { return; }
-
     gate_candidates = midi_mapper_get_gates(note);
     while (gate_candidates) {
       uint8_t gate_index = pop_lsb(&gate_candidates);
@@ -112,10 +127,6 @@ static void handle_midi_message(const MidiMsg *msg) {
     }
     break;
   case 0x80:
-    if (learn_is_active()) { return; }
-
-    if (channel != midi_mapper_get_channel()) { return; }
-
     gate_candidates = midi_mapper_get_gates(note);
     while (gate_candidates) {
       uint8_t gate_index = pop_lsb(&gate_candidates);
@@ -123,9 +134,51 @@ static void handle_midi_message(const MidiMsg *msg) {
       max5825_write(gate_index, 0);
     }
     break;
-  case 0xB0:
+  }
+}
+
+static void handle_cc(const MidiMsg *msg) {
+  const uint8_t status = msg->status & 0xF0;
+  const uint8_t channel = msg->status & 0x0F;
+  const uint8_t note = msg->d1;
+  const uint8_t velocity = msg->d2;
+
+  if (learn_is_active()) {
+    if (status == 0x90 && velocity > 0) {
+      if (g_learn.gate == 0) { midi_mapper_set_channel(channel); }
+      learn_on_note(note);
+    }
+    return;
+  }
+
+  if (channel != midi_mapper_get_channel()) { return; }
+
+  uint8_t gate_candidates;
+
+  switch (status) {
+  case 0x90:
+    gate_candidates = midi_mapper_get_gates(note);
+    while (gate_candidates) {
+      uint8_t gate_index = pop_lsb(&gate_candidates);
+      if (velocity > 0) {
+        gate_set(gate_index, 1);
+      } else {
+        gate_set(gate_index, 0);
+      }
+    }
     break;
-  default:
+  case 0x80:
+    gate_candidates = midi_mapper_get_gates(note);
+    while (gate_candidates) {
+      uint8_t gate_index = pop_lsb(&gate_candidates);
+      gate_set(gate_index, 0);
+    }
+    break;
+  case 0xB0:
+    if (msg->d1 >= 69 && msg->d1 <= 76) {
+      uint8_t dac_ch = msg->d1 - 69;
+      max5825_write(dac_ch, (uint16_t)msg->d2 << 5);
+    }
     break;
   }
 }
@@ -190,12 +243,14 @@ static void menu_mode_loop(void) {
         learn_begin();
         return;
       case 1:
+        set_mode(MODE_VELOCITY);
+        eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
         break;
       case 2:
+        set_mode(MODE_CC);
+        eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
         break;
       case 3:
-        break;
-      default:
         break;
       }
 
@@ -212,6 +267,14 @@ int main(void) {
   twi_init();
   max5825_init();
   midi_mapper_init();
+
+  uint8_t mode = eeprom_read_byte((uint8_t *)EEPROM_MODE_ADDR);
+  if (mode == MODE_CC) {
+    set_mode(MODE_CC);
+  } else {
+    set_mode(MODE_VELOCITY);
+  }
+
   gate_wipe();
 
   USART_Init(MY_UBRR);

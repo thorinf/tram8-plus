@@ -45,5 +45,10 @@
 
 // EEPROM configuration (matching stock firmware layout)
 #define EEPROM_BUTTON_FIX_ADDR 0x07
-#define EEPROM_CHANNEL_ADDR 0x100 // 1 byte - MIDI channel
-#define EEPROM_NOTEMAP_ADDR 0x101 // 8 bytes - note number per gate
+#define EEPROM_CHANNEL_ADDR 0x100
+#define EEPROM_NOTEMAP_ADDR 0x101
+#define EEPROM_MODE_ADDR 0x110
+
+// MIDI modes
+#define MODE_VELOCITY 1
+#define MODE_CC 2
