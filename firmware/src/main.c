@@ -1,7 +1,10 @@
 #include "gpio.h"
 #include "hardware_config.h"
+#include "max5825_control.h"
+#include "midi_learn.h"
 #include "midi_mapper.h"
 #include "midi_parser.h"
+#include "twi_control.h"
 #include "ui.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
@@ -20,7 +23,6 @@ static volatile uint8_t rb_overflow = 0;
 static volatile uint8_t timer_ticks = 0;
 
 static button_t learn_button = {BUTTON_IDLE, 0, read_button};
-static led_t learn_led = {LED_OFF, 0, 0, led_on, led_off};
 
 void USART_Init(unsigned int ubrr) {
   UBRRH = (unsigned char)(ubrr >> 8);
@@ -43,7 +45,7 @@ ISR(USART_RXC_vect) {
 
   if (next == rb_tail) {
     rb_overflow = 1;
-    return; // Drop byte
+    return;
   }
   rb[head] = byte;
   rb_head = next;
@@ -80,27 +82,48 @@ static inline uint8_t pop_lsb(uint8_t *mask) {
 static void handle_midi_message(const MidiMsg *msg) {
   const uint8_t status = msg->status & 0xF0;
   const uint8_t channel = msg->status & 0x0F;
-  const uint8_t data1 = msg->d1;
-  const uint8_t data2 = msg->d2;
+  const uint8_t note = msg->d1;
+  const uint8_t velocity = msg->d2;
 
   uint8_t gate_candidates;
 
   switch (status) {
-  case 0x90: // note on
-    gate_candidates = midi_mapper_gate_mask(channel, data1);
+  case 0x90:
+    if (learn_is_active()) {
+      if (velocity > 0) {
+        if (g_learn.gate == 0) { midi_mapper_set_channel(channel); }
+        learn_on_note(note);
+      }
+      return;
+    }
+
+    if (channel != midi_mapper_get_channel()) { return; }
+
+    gate_candidates = midi_mapper_get_gates(note);
     while (gate_candidates) {
       uint8_t gate_index = pop_lsb(&gate_candidates);
-      gate_set(gate_index, data2 ? 1 : 0);
+      if (velocity > 0) {
+        gate_set(gate_index, 1);
+        max5825_write(gate_index, (uint16_t)velocity << 5);
+      } else {
+        gate_set(gate_index, 0);
+        max5825_write(gate_index, 0);
+      }
     }
     break;
-  case 0x80: // note off
-    gate_candidates = midi_mapper_gate_mask(channel, data1);
+  case 0x80:
+    if (learn_is_active()) { return; }
+
+    if (channel != midi_mapper_get_channel()) { return; }
+
+    gate_candidates = midi_mapper_get_gates(note);
     while (gate_candidates) {
       uint8_t gate_index = pop_lsb(&gate_candidates);
       gate_set(gate_index, 0);
+      max5825_write(gate_index, 0);
     }
     break;
-  case 0xB0: // cc
+  case 0xB0:
     break;
   default:
     break;
@@ -164,13 +187,14 @@ static void menu_mode_loop(void) {
     if (learn_button.state == BUTTON_HELD) {
       switch (menu_index) {
       case 0:
-        break; // exit
+        learn_begin();
+        return;
       case 1:
-        break; // placeholder
+        break;
       case 2:
-        break; // placeholder
+        break;
       case 3:
-        break; // placeholder
+        break;
       default:
         break;
       }
@@ -185,6 +209,9 @@ static void menu_mode_loop(void) {
 
 int main(void) {
   gpio_init();
+  twi_init();
+  max5825_init();
+  midi_mapper_init();
   gate_wipe();
 
   USART_Init(MY_UBRR);

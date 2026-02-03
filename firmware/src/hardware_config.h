@@ -43,6 +43,7 @@
 #define VERSION_PORT PORTB
 #define VERSION_PIN_REG PINB
 
-// EEPROM configuration
+// EEPROM configuration (matching stock firmware layout)
 #define EEPROM_BUTTON_FIX_ADDR 0x07
-#define EEPROM_MIDIMAP_ADDR 0x101
+#define EEPROM_CHANNEL_ADDR 0x100 // 1 byte - MIDI channel
+#define EEPROM_NOTEMAP_ADDR 0x101 // 8 bytes - note number per gate
