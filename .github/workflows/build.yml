@@ -25,3 +25,19 @@ jobs:
 
       - name: Run tests
         run: make -C firmware/tests test
+
+  vst:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S vst -B vst/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build vst/build --config Release
+
+      - name: Sign (ad-hoc)
+        run: codesign --force --deep -s - vst/build/VST3/Release/tram8-bridge.vst3
