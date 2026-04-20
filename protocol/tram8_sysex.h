@@ -15,10 +15,12 @@ extern "C" {
  *   10 = state update command
  *
  * All data bytes are 7-bit (0x00-0x7F) per MIDI spec.
+ * DAC values are transmitted as 14-bit (two 7-bit bytes).
+ * Firmware shifts >> 2 to get 12-bit for the hardware DAC.
  *
  * Gate mask: <gate_lo> <gate_hi>     (8 bits split across 7-bit boundary)
- * Optional:  <dac0_hi> ... <dac7_hi> (top 7 bits of each DAC, bits 11:5)
- * Optional:  <lo_packed...>          (bottom 5 bits per DAC, bitpacked)
+ * Optional:  <dac0_hi> ... <dac7_hi> (top 7 bits of each DAC, bits 13:7)
+ * Optional:  <dac0_lo> ... <dac7_lo> (low 7 bits of each DAC, bits 6:0)
  *
  * gate_lo = gate_mask & 0x7F  (bits 6:0)
  * gate_hi = gate_mask >> 7    (bit 7)
@@ -27,20 +29,19 @@ extern "C" {
  *
  *   Form 1 - gates only:       6 bytes total
  *   Form 2 - gates + coarse:  14 bytes total
- *   Form 3 - gates + full:    20 bytes total
+ *   Form 3 - gates + full:    22 bytes total
  *
  * Form 1: gates only (note off, DAC-off mode)
  *   F0 7D 10 GL GH F7
  *   Firmware sets gates, DACs unchanged.
  *
  * Form 2: gates + coarse DAC (velocity, CC — 7-bit sources)
- *   F0 7D 10 GL GH D0 D1 D2 D3 D4 D5 D6 D7 F7
- *   dac[i] = dac_hi[i] << 5   (128 levels, 0-4064)
+ *   F0 7D 10 GL GH D0h D1h D2h D3h D4h D5h D6h D7h F7
+ *   dac[i] = dac_hi[i] << 5   (128 levels, 7-bit precision)
  *
- * Form 3: gates + full 12-bit DAC (pitch mode)
- *   F0 7D 10 GL GH D0..D7 L0 L1 L2 L3 L4 L5 F7
- *   Low 5 bits packed LSB-first: 8x5 = 40 bits -> ceil(40/7) = 6 bytes
- *   dac[i] = (dac_hi[i] << 5) | low5[i]
+ * Form 3: gates + full 14-bit DAC (pitch mode)
+ *   F0 7D 10 GL GH D0h..D7h D0l..D7l F7
+ *   dac[i] = (dac_hi[i] << 5) | (dac_lo[i] >> 2)   (12-bit precision)
  */
 
 #define TRAM8_SYSEX_START 0xF0
@@ -54,7 +55,7 @@ extern "C" {
 
 #define TRAM8_LEN_GATES 6
 #define TRAM8_LEN_COARSE 14
-#define TRAM8_LEN_FULL 20
+#define TRAM8_LEN_FULL 22
 #define TRAM8_HEADER_LEN 3
 
 typedef enum { TRAM8_FORM_GATES, TRAM8_FORM_COARSE, TRAM8_FORM_FULL } tram8_form_t;
@@ -72,31 +73,18 @@ static inline uint8_t tram8_pack(uint8_t* buf, uint8_t gate_mask, const uint16_t
   }
 
   for (int i = 0; i < 8; i++)
-    buf[5 + i] = (uint8_t)((dac[i] >> 5) & 0x7F);
+    buf[5 + i] = (uint8_t)((dac[i] >> 7) & 0x7F);
 
   if (form == TRAM8_FORM_COARSE) {
     buf[13] = TRAM8_SYSEX_END;
     return TRAM8_LEN_COARSE;
   }
 
-  uint32_t acc = 0;
-  uint8_t bits = 0;
-  uint8_t pos = 13;
+  for (int i = 0; i < 8; i++)
+    buf[13 + i] = (uint8_t)(dac[i] & 0x7F);
 
-  for (int i = 0; i < 8; i++) {
-    acc |= (uint32_t)(dac[i] & 0x1F) << bits;
-    bits += 5;
-    while (bits >= 7) {
-      buf[pos++] = (uint8_t)(acc & 0x7F);
-      acc >>= 7;
-      bits -= 7;
-    }
-  }
-  if (bits > 0)
-    buf[pos++] = (uint8_t)(acc & 0x7F);
-
-  buf[pos] = TRAM8_SYSEX_END;
-  return pos + 1;
+  buf[21] = TRAM8_SYSEX_END;
+  return TRAM8_LEN_FULL;
 }
 
 static inline int
@@ -121,7 +109,7 @@ tram8_parse(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]
     return -1;
 
   for (int i = 0; i < 8; i++)
-    dac[i] = (uint16_t)(buf[5 + i] & 0x7F) << 5;
+    dac[i] = (uint16_t)(buf[5 + i] & 0x7F) << 7;
 
   if (len == TRAM8_LEN_COARSE) {
     *form = TRAM8_FORM_COARSE;
@@ -131,19 +119,8 @@ tram8_parse(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]
   if (len < TRAM8_LEN_FULL)
     return -1;
 
-  uint32_t acc = 0;
-  uint8_t bits = 0;
-  uint8_t pos = 13;
-
-  for (int i = 0; i < 8; i++) {
-    while (bits < 5) {
-      acc |= (uint32_t)(buf[pos++] & 0x7F) << bits;
-      bits += 7;
-    }
-    dac[i] |= (uint16_t)(acc & 0x1F);
-    acc >>= 5;
-    bits -= 5;
-  }
+  for (int i = 0; i < 8; i++)
+    dac[i] |= (uint16_t)(buf[13 + i] & 0x7F);
 
   *form = TRAM8_FORM_FULL;
   return 0;

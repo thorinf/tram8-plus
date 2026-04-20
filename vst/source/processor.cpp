@@ -117,7 +117,7 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         ccValues[cc] = val;
         for (int g = 0; g < TRAM8_NUM_GATES; g++) {
           if (dacMode[g] == kDacCC && ccNum[g] == cc && (gateMask & (1 << g))) {
-            dacValues[g] = (uint16_t)(val * (TRAM8_DAC_MAX / 127.0f));
+            dacValues[g] = (uint16_t)val << 7;
           }
         }
       }
@@ -153,17 +153,17 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
                 note = 0;
               if (note > 60)
                 note = 60;
-              dacValues[g] = pitchLookup[note] >> 4;
+              dacValues[g] = (pitchLookup[note] >> 2) & 0x3FFC;
               break;
             }
             case kDacCC:
-              dacValues[g] = (uint16_t)(ccValues[ccNum[g]] * (TRAM8_DAC_MAX / 127.0f));
+              dacValues[g] = (uint16_t)ccValues[ccNum[g]] << 7;
               break;
             case kDacOff:
               dacValues[g] = 0;
               break;
             default:
-              dacValues[g] = (uint16_t)(e.noteOn.velocity * (float)TRAM8_DAC_MAX);
+              dacValues[g] = (uint16_t)(e.noteOn.velocity * 127.0f) << 7;
               break;
           }
         }
