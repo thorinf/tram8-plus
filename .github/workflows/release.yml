@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AVR toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-avr avr-libc
+
+      - name: Build firmware
+        run: make -C firmware
+
+      - name: Run tests
+        run: make -C firmware/tests test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Package firmware SysEx
+        run: |
+          pip install intelhex
+          python tools/firmware-packager.py firmware/build/main.hex -v
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            firmware/build/main.hex
+            firmware/build/main_firmware.syx
+
+  vst:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build VST3
+        run: |
+          cmake -B vst/build -S vst -DCMAKE_BUILD_TYPE=Release
+          cmake --build vst/build --config Release
+
+      - name: Package VST3 bundle
+        run: |
+          cd vst/build
+          VST3_DIR=$(find . -name "*.vst3" -type d | head -1)
+          if [ -z "$VST3_DIR" ]; then
+            echo "ERROR: No .vst3 bundle found"
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc "$VST3_DIR" tram8-bridge.vst3.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vst-macos
+          path: vst/build/tram8-bridge.vst3.zip
+
+  release:
+    needs: [firmware, vst]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: artifacts/firmware
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vst-macos
+          path: artifacts/vst
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/firmware/main_firmware.syx
+            artifacts/vst/tram8-bridge.vst3.zip
