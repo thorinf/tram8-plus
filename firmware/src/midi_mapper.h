@@ -3,57 +3,31 @@
 
 #include <stdint.h>
 
-#include "hardware_config.h" // NUM_GATES
+#include "hardware_config.h"
 
-#define MAPPER_ANY 0xFF
+// Initialize mapper (load from EEPROM)
+void midi_mapper_init(void);
 
-typedef enum { MM_VELOCITY = 0, MM_CC, MM_PITCH, MM_PITCH_SAH, MM_RANDSEQ, MM_RANDSEQ_SAH } MidiMapperMode;
+// Get gate bitmask for a note (O(1) lookup)
+uint8_t midi_mapper_get_gates(uint8_t note);
 
-typedef struct {
-  uint8_t ch;
-  uint8_t note;
-} NoteSpec;
+// Set a gate for a note (used during learn mode)
+void midi_mapper_set_gate(uint8_t note, uint8_t gate);
 
-typedef struct {
-  uint8_t ch;
-  uint8_t cc;
-} CCSpec;
+// Clear all mappings
+void midi_mapper_clear(void);
 
-typedef struct {
-  uint8_t mode;
-  NoteSpec gate;
-  union {
-    CCSpec cc;
-    uint8_t pitch_ch;
-    uint8_t sample_ch;
-    struct {
-      NoteSpec step;
-      NoteSpec reset;
-    } rand;
-  } secondary;
-} MidiMapperEntry;
+// Load mappings from EEPROM
+void midi_mapper_load(void);
 
-typedef struct {
-  MidiMapperEntry slot[NUM_GATES];
-} MidiMapper;
+// Save mappings to EEPROM
+void midi_mapper_save(void);
 
-typedef struct {
-  uint8_t gate_chan_mask[16];
-  uint8_t gate_data1_mask[128];
-  uint8_t secondary_note_mask;
-  uint8_t secondary_cc_mask;
-  uint8_t secondary_chan_mask[16];
-  uint8_t secondary_data1_mask[128];
-} MidiMapperMasks;
+// Get/set MIDI channel
+uint8_t midi_mapper_get_channel(void);
+void midi_mapper_set_channel(uint8_t channel);
 
-extern const MidiMapperEntry midi_mapper_velo[8];
-extern const MidiMapperEntry midi_mapper_cc[8];
-extern const MidiMapperEntry midi_mapper_bsp[8];
-
-void midi_mapper_rebuild_masks(void);
-void midi_mapper_set_masks(MidiMapperMasks *storage);
-uint8_t midi_mapper_gate_mask(uint8_t channel, uint8_t note);
-uint8_t midi_mapper_secondary_mask(uint8_t channel, uint8_t control);
-MidiMapper *midi_mapper_get_map(void);
+// Get note assigned to a gate (for save compatibility)
+uint8_t midi_mapper_get_note_for_gate(uint8_t gate);
 
 #endif

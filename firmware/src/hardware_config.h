@@ -37,6 +37,19 @@
 #define CLR_PORT PORTC
 #define CONTROL_DDR DDRC
 
-// EEPROM configuration
+// Hardware version detection pin
+#define VERSION_PIN PB1
+#define VERSION_DDR DDRB
+#define VERSION_PORT PORTB
+#define VERSION_PIN_REG PINB
+
+// EEPROM configuration (matching stock firmware layout)
 #define EEPROM_BUTTON_FIX_ADDR 0x07
-#define EEPROM_MIDIMAP_ADDR 0x101
+#define EEPROM_CHANNEL_ADDR 0x100
+#define EEPROM_NOTEMAP_ADDR 0x101
+#define EEPROM_MODE_ADDR 0x110
+
+// MIDI modes
+#define MODE_VELOCITY 1
+#define MODE_CC 2
+#define MODE_SYSEX 3

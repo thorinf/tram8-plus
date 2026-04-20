@@ -1,8 +1,13 @@
+#include "../../protocol/tram8_sysex.h"
 #include "gpio.h"
 #include "hardware_config.h"
+#include "max5825_control.h"
+#include "midi_learn.h"
 #include "midi_mapper.h"
 #include "midi_parser.h"
+#include "twi_control.h"
 #include "ui.h"
+#include <avr/eeprom.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdbool.h>
@@ -20,7 +25,11 @@ static volatile uint8_t rb_overflow = 0;
 static volatile uint8_t timer_ticks = 0;
 
 static button_t learn_button = {BUTTON_IDLE, 0, read_button};
-static led_t learn_led = {LED_OFF, 0, 0, led_on, led_off};
+static uint8_t module_mode = MODE_VELOCITY;
+
+static void handle_velocity(const MidiMsg *msg);
+static void handle_cc(const MidiMsg *msg);
+static void (*handle_midi_message)(const MidiMsg *msg) = handle_velocity;
 
 void USART_Init(unsigned int ubrr) {
   UBRRH = (unsigned char)(ubrr >> 8);
@@ -43,7 +52,7 @@ ISR(USART_RXC_vect) {
 
   if (next == rb_tail) {
     rb_overflow = 1;
-    return; // Drop byte
+    return;
   }
   rb[head] = byte;
   rb_head = next;
@@ -77,33 +86,178 @@ static inline uint8_t pop_lsb(uint8_t *mask) {
   return gate;
 }
 
-static void handle_midi_message(const MidiMsg *msg) {
+static void set_mode(uint8_t mode) {
+  module_mode = mode;
+  handle_midi_message = (mode == MODE_CC) ? handle_cc : handle_velocity;
+  for (uint8_t i = 0; i < NUM_GATES; ++i) {
+    gate_set(i, 0);
+    max5825_write(i, 0);
+  }
+}
+
+static void handle_velocity(const MidiMsg *msg) {
   const uint8_t status = msg->status & 0xF0;
   const uint8_t channel = msg->status & 0x0F;
-  const uint8_t data1 = msg->d1;
-  const uint8_t data2 = msg->d2;
+  const uint8_t note = msg->d1;
+  const uint8_t velocity = msg->d2;
+
+  if (learn_is_active()) {
+    if (status == 0x90 && velocity > 0) {
+      if (g_learn.gate == 0) { midi_mapper_set_channel(channel); }
+      learn_on_note(note);
+    }
+    return;
+  }
+
+  if (channel != midi_mapper_get_channel()) { return; }
 
   uint8_t gate_candidates;
 
   switch (status) {
-  case 0x90: // note on
-    gate_candidates = midi_mapper_gate_mask(channel, data1);
+  case 0x90:
+    gate_candidates = midi_mapper_get_gates(note);
     while (gate_candidates) {
       uint8_t gate_index = pop_lsb(&gate_candidates);
-      gate_set(gate_index, data2 ? 1 : 0);
+      if (velocity > 0) {
+        gate_set(gate_index, 1);
+        max5825_write(gate_index, (uint16_t)velocity << 5);
+      } else {
+        gate_set(gate_index, 0);
+        max5825_write(gate_index, 0);
+      }
     }
     break;
-  case 0x80: // note off
-    gate_candidates = midi_mapper_gate_mask(channel, data1);
+  case 0x80:
+    gate_candidates = midi_mapper_get_gates(note);
+    while (gate_candidates) {
+      uint8_t gate_index = pop_lsb(&gate_candidates);
+      gate_set(gate_index, 0);
+      max5825_write(gate_index, 0);
+    }
+    break;
+  }
+}
+
+static void handle_cc(const MidiMsg *msg) {
+  const uint8_t status = msg->status & 0xF0;
+  const uint8_t channel = msg->status & 0x0F;
+  const uint8_t note = msg->d1;
+  const uint8_t velocity = msg->d2;
+
+  if (learn_is_active()) {
+    if (status == 0x90 && velocity > 0) {
+      if (g_learn.gate == 0) { midi_mapper_set_channel(channel); }
+      learn_on_note(note);
+    }
+    return;
+  }
+
+  if (channel != midi_mapper_get_channel()) { return; }
+
+  uint8_t gate_candidates;
+
+  switch (status) {
+  case 0x90:
+    gate_candidates = midi_mapper_get_gates(note);
+    while (gate_candidates) {
+      uint8_t gate_index = pop_lsb(&gate_candidates);
+      if (velocity > 0) {
+        gate_set(gate_index, 1);
+      } else {
+        gate_set(gate_index, 0);
+      }
+    }
+    break;
+  case 0x80:
+    gate_candidates = midi_mapper_get_gates(note);
     while (gate_candidates) {
       uint8_t gate_index = pop_lsb(&gate_candidates);
       gate_set(gate_index, 0);
     }
     break;
-  case 0xB0: // cc
+  case 0xB0:
+    if (msg->d1 >= 69 && msg->d1 <= 76) {
+      uint8_t dac_ch = msg->d1 - 69;
+      max5825_write(dac_ch, (uint16_t)msg->d2 << 5);
+    }
     break;
-  default:
-    break;
+  }
+}
+
+static void handle_sysex_state(const uint8_t *buf, uint8_t len) {
+  uint8_t gate_mask;
+  uint16_t dac[TRAM8_NUM_GATES];
+
+  if (tram8_parse_state(buf, len, &gate_mask, dac) != 0) return;
+
+  for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++) {
+    gate_set(i, (gate_mask >> i) & 1);
+    max5825_write(i, dac[i]);
+  }
+}
+
+static void sysex_mode_loop(void) {
+  uint8_t syx_buf[TRAM8_STATE_MSG_LEN];
+  uint8_t syx_len = 0;
+  uint8_t in_sysex = 0;
+
+  for (;;) {
+    uint8_t overflow;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { overflow = rb_overflow; }
+    if (rb_tail == rb_head && overflow) {
+      in_sysex = 0;
+      syx_len = 0;
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { rb_overflow = 0; }
+    }
+
+    uint8_t byte;
+    if (rb_pop(&byte)) {
+      if (byte >= 0xF8) continue; // skip real-time
+
+      if (byte == TRAM8_SYSEX_START) {
+        in_sysex = 1;
+        syx_len = 0;
+        syx_buf[syx_len++] = byte;
+        continue;
+      }
+
+      if (!in_sysex) continue;
+
+      if (byte == TRAM8_SYSEX_END) {
+        if (syx_len < TRAM8_STATE_MSG_LEN - 1) {
+          in_sysex = 0;
+          continue;
+        }
+        syx_buf[syx_len++] = byte;
+        handle_sysex_state(syx_buf, syx_len);
+        in_sysex = 0;
+        syx_len = 0;
+        continue;
+      }
+
+      if (byte >= 0x80) {
+        in_sysex = 0;
+        syx_len = 0;
+        continue;
+      }
+
+      if (syx_len < TRAM8_STATE_MSG_LEN - 1) {
+        syx_buf[syx_len++] = byte;
+      } else {
+        in_sysex = 0;
+        syx_len = 0;
+      }
+    }
+
+    uint8_t ticks;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ticks = timer_ticks;
+      timer_ticks = 0;
+    }
+    if (ticks) {
+      button_update(&learn_button, ticks);
+      if (learn_button.state == BUTTON_HELD) return;
+    }
   }
 }
 
@@ -164,14 +318,19 @@ static void menu_mode_loop(void) {
     if (learn_button.state == BUTTON_HELD) {
       switch (menu_index) {
       case 0:
-        break; // exit
+        learn_begin();
+        return;
       case 1:
-        break; // placeholder
+        set_mode(MODE_VELOCITY);
+        eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
+        break;
       case 2:
-        break; // placeholder
+        set_mode(MODE_CC);
+        eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
+        break;
       case 3:
-        break; // placeholder
-      default:
+        set_mode(MODE_SYSEX);
+        eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
         break;
       }
 
@@ -185,6 +344,19 @@ static void menu_mode_loop(void) {
 
 int main(void) {
   gpio_init();
+  twi_init();
+  max5825_init();
+  midi_mapper_init();
+
+  uint8_t mode = eeprom_read_byte((uint8_t *)EEPROM_MODE_ADDR);
+  if (mode == MODE_CC) {
+    set_mode(MODE_CC);
+  } else if (mode == MODE_SYSEX) {
+    set_mode(MODE_SYSEX);
+  } else {
+    set_mode(MODE_VELOCITY);
+  }
+
   gate_wipe();
 
   USART_Init(MY_UBRR);
@@ -193,7 +365,11 @@ int main(void) {
   sei();
 
   for (;;) {
-    play_mode_loop();
+    if (module_mode == MODE_SYSEX) {
+      sysex_mode_loop();
+    } else {
+      play_mode_loop();
+    }
     menu_mode_loop();
   }
 }

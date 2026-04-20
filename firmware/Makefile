@@ -1,8 +1,8 @@
 CC = avr-gcc
-CFLAGS = -g -O2 -mmcu=atmega8 -flto
+CFLAGS = -g -O1 -mmcu=atmega8a -flto
 OBJCOPY = avr-objcopy
 SIZE = avr-size
-LDFLAGS = -flto
+LDFLAGS = -flto -Wl,--print-memory-usage
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -18,7 +18,9 @@ $(BUILD_DIR)/main.hex: $(BUILD_DIR)/main.elf
 	$(OBJCOPY) -j .text -j .data -O ihex $^ $@
 
 size: $(BUILD_DIR)/main.elf
-	$(SIZE) -C --mcu=atmega8 $^
+	$(SIZE) -C --mcu=atmega8a $^
+	@echo ""
+	@echo "Note: Stack usage analysis disabled with LTO (remove -flto to see stack details)"
 
 clean:
 	-rm -rf $(BUILD_DIR)
