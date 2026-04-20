@@ -13,6 +13,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(external)
 smtg_enable_vst3_sdk()
 
+set(UI_HTML_INPUT "${CMAKE_CURRENT_SOURCE_DIR}/source/ui.html")
+set(UI_HTML_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ui_html.h")
+
+add_custom_command(
+  OUTPUT "${UI_HTML_OUTPUT}"
+  COMMAND ${CMAKE_COMMAND}
+    -DINPUT="${UI_HTML_INPUT}"
+    -DOUTPUT="${UI_HTML_OUTPUT}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_html.cmake"
+  DEPENDS "${UI_HTML_INPUT}"
+  COMMENT "Generating ui_html.h from ui.html"
+)
+add_custom_target(generate_ui_html DEPENDS "${UI_HTML_OUTPUT}")
+
 smtg_add_vst3plugin(tram8-bridge
   source/cids.h
   source/version.h
@@ -24,6 +38,9 @@ smtg_add_vst3plugin(tram8-bridge
   source/plugview.mm
   source/entry.cpp
 )
+
+add_dependencies(tram8-bridge generate_ui_html)
+target_include_directories(tram8-bridge PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 target_link_libraries(tram8-bridge
   PRIVATE
