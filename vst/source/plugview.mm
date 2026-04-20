@@ -1,5 +1,6 @@
 #include "plugview.h"
 #include "cids.h"
+#include "ui_html.h"
 #include "pluginterfaces/gui/iplugview.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
 
@@ -208,13 +209,8 @@ tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
 
   [webView setValue:@NO forKey:@"drawsBackground"];
 
-  NSBundle* bundle = [NSBundle bundleForClass:[Tram8WebBridge class]];
-  NSURL* htmlURL = [bundle URLForResource:@"ui" withExtension:@"html"];
-  if (htmlURL) {
-    [webView loadFileURL:htmlURL allowingReadAccessToURL:[htmlURL URLByDeletingLastPathComponent]];
-  } else {
-    NSLog(@"tram8+: ui.html not found in bundle: %@", bundle.bundlePath);
-  }
+  NSString* html = [NSString stringWithUTF8String:kUIHTML];
+  [webView loadHTMLString:html baseURL:nil];
 
   [parentView addSubview:webView];
   return kResultOk;
