@@ -143,10 +143,13 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     if (e.type == Event::kNoteOnEvent) {
       os_log(logger, "note on: ch=%d note=%d vel=%.3f", e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-        bool chMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOn.channel);
-        bool noteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOn.pitch);
-        if (chMatch && noteMatch) {
+        bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOn.channel);
+        bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOn.pitch);
+        if (gateChMatch && gateNoteMatch)
           gateMask |= (1 << g);
+
+        bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOn.channel);
+        if (dacChMatch) {
           switch (dacMode[g]) {
             case kDacPitch: {
               int note = e.noteOn.pitch;
@@ -172,13 +175,14 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     } else if (e.type == Event::kNoteOffEvent) {
       os_log(logger, "note off: ch=%d note=%d", e.noteOff.channel, e.noteOff.pitch);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-        bool chMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOff.channel);
-        bool noteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
-        if (chMatch && noteMatch) {
+        bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOff.channel);
+        bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
+        if (gateChMatch && gateNoteMatch)
           gateMask &= ~(1 << g);
-          if (dacMode[g] == kDacVelocity)
-            dacValues[g] = 0;
-        }
+
+        bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOff.channel);
+        if (dacChMatch && dacMode[g] == kDacVelocity)
+          dacValues[g] = 0;
       }
     }
   }
