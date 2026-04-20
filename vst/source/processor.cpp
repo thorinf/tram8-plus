@@ -301,8 +301,12 @@ void Processor::sendState() {
     }
   }
 
+  uint16_t dac12[TRAM8_NUM_GATES];
+  for (int i = 0; i < TRAM8_NUM_GATES; i++)
+    dac12[i] = dacValues[i] >> 2;
+
   uint8_t buf[TRAM8_LEN_FULL];
-  uint8_t len = tram8_pack(buf, gateMask, dacValues, form);
+  uint8_t len = tram8_pack(buf, gateMask, dac12, form);
   if (!sendBytes(buf, len))
     return;
 

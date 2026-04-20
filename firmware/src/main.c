@@ -207,7 +207,7 @@ static void handle_sysex(const uint8_t* buf, uint8_t len) {
     gate_set(i, (gate_mask >> i) & 1);
   if (form != TRAM8_FORM_GATES) {
     for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
-      max5825_write(i, dac[i] >> 2);
+      max5825_write(i, dac[i]);
   }
 }
 
