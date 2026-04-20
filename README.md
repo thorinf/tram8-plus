@@ -1,41 +1,47 @@
-# TRAM8+
+# tram8+
 
-Enhanced firmware for the TRAM8 eurorack synthesizer module with improved functionality.
+VST3 plugin and firmware for the Tram8 hardware module. Bridges a DAW to 8 CV/gate outputs via packed SysEx over MIDI.
 
-## Overview
+![tram8+ VST UI](assets/vst-ui.png)
 
-TRAM8+ is an enhanced version of the original [TRAM8](https://github.com/kay-lpzw/TRAM8) firmware.
+## Architecture
 
-## Quick Start
+- **VST3 Plugin** — receives MIDI note/CC events from the DAW, converts to packed SysEx messages, sends via CoreMIDI to the hardware
+- **Firmware** — AVR-based, receives SysEx and drives 8 gate outputs + 12-bit DAC (MAX5825) for CV
+- **Protocol** — shared header (`protocol/tram8_sysex.h`) defines the 7-bit packed message format
 
-### Prerequisites
+## DAC Modes
 
-- AVR toolchain (`avr-gcc`, `avr-objcopy`, `avr-size`)
-- Python 3.10+ with `intelhex` package
+Each gate has an independent DAC mode:
 
-### Building Firmware
+| Mode | DAC Output |
+|------|-----------|
+| Velocity | Note velocity scaled to 0–5V |
+| Pitch | 1V/oct from MIDI note number |
+| CC | MIDI CC value scaled to 0–5V |
+| Off | 0V |
 
-```bash
-# Build firmware
-cd firmware
-make
+## Building
 
-# Package for MIDI firmware update
-cd ..
-python tools/firmware-packager.py firmware/build/main.hex -v
+### VST3 Plugin (macOS)
+
+```sh
+cd vst/build
+XCODE_VERSION=15.0 cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release --target tram8-bridge
 ```
 
-This generates:
-- `main.hex` - Intel HEX firmware file
-- `main_firmware.syx` - MIDI SysEx file for hardware updates
+### Firmware
 
-### Development Setup
+Requires `avr-gcc` toolchain. See `firmware/Makefile`.
 
-```bash
-# Install Python dependencies
-pip install intelhex
+## Project Structure
 
-# Install pre-commit hooks (optional)
-pip install pre-commit
-pre-commit install
+```
+firmware/       AVR firmware (C)
+protocol/       Shared SysEx message definitions
+vst/
+  source/       VST3 plugin (C++/ObjC++)
+  resource/     WebView UI (HTML/CSS/JS)
+  external/     VST3 SDK (submodule)
 ```
