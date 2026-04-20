@@ -157,7 +157,7 @@ const NT = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const MODES = ['Velocity','Pitch','CC','Off'];
 const MODE_CLS = ['velocity','pitch','cc','off'];
 
-function nName(n) { return n < 0 ? 'Any' : NT[n%12] + (Math.floor(n/12)-1); }
+function nName(n) { return n < 0 ? 'Any' : NT[n%12] + (Math.floor(n/12)-2); }
 function nLabel(n) { return n < 0 ? 'Any' : nName(n) + ' (' + n + ')'; }
 function chLbl(c) { return c < 0 ? 'Any' : '' + (c+1); }
 
