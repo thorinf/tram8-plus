@@ -5,9 +5,11 @@
 
 static uint8_t simulated_reading = 0;
 
-static uint8_t mock_button_read(void) { return simulated_reading; }
+static uint8_t mock_button_read(void) {
+  return simulated_reading;
+}
 
-static void simulate_ticks(button_t *btn, uint16_t ticks) {
+static void simulate_ticks(button_t* btn, uint16_t ticks) {
   for (uint16_t i = 0; i < ticks; i++) {
     button_update(btn, 1);
   }

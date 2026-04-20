@@ -5,7 +5,7 @@
 
 #include "hardware_config.h"
 
-#define DEBOUNCE_MS 20     // 20ms debounce time
+#define DEBOUNCE_MS 20 // 20ms debounce time
 #define LONG_PRESS_MS 2000 // 2 second long press
 #define DEBOUNCE_TICKS (DEBOUNCE_MS / TIMER_TICK_MS)
 #define LONG_PRESS_TICKS (LONG_PRESS_MS / TIMER_TICK_MS)
@@ -39,6 +39,6 @@ typedef struct {
   void (*off)(void);
 } led_t;
 
-void button_update(button_t *button, uint8_t ticks);
-void led_update(led_t *led, uint8_t ticks);
+void button_update(button_t* button, uint8_t ticks);
+void led_update(led_t* led, uint8_t ticks);
 #endif
