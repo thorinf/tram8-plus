@@ -22,7 +22,8 @@ add_custom_command(
     -DINPUT="${UI_HTML_INPUT}"
     -DOUTPUT="${UI_HTML_OUTPUT}"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_html.cmake"
-  DEPENDS "${UI_HTML_INPUT}"
+  DEPENDS "${UI_HTML_INPUT}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_html.cmake"
+  VERBATIM
   COMMENT "Generating ui_html.h from ui.html"
 )
 add_custom_target(generate_ui_html DEPENDS "${UI_HTML_OUTPUT}")
