@@ -15,8 +15,7 @@ extern "C" {
  *   01 = tram8 device ID
  *
  * All data bytes are 7-bit (0x00-0x7F) per MIDI spec.
- * 12-bit DAC values are split across 2 bytes:
- *   lo = bits 0-6, hi = bits 7-11
+ * Payload is bitpacked LSB-first into 7-bit bytes.
  */
 
 #define TRAM8_SYSEX_START 0xF0
@@ -34,43 +33,45 @@ extern "C" {
 /*
  * State message layout (TRAM8_CMD_STATE):
  *
- *   F0 7D 01 01 <gate_lo> <gate_hi> <d0_lo> <d0_hi> ... <d7_lo> <d7_hi> F7
+ *   F0 7D 01 01 <15 packed bytes> F7
  *
- *   gate_lo:   bits 0-6 of gate mask (bit N = gate N, 1=on, 0=off)
- *   gate_hi:   bit 7 of gate mask (gate 7)
- *   dN_lo:     bits 0-6 of 12-bit DAC value
- *   dN_hi:     bits 7-11 of 12-bit DAC value
+ *   Bitstream (104 bits, LSB-first into 7-bit bytes):
+ *     [7:0]   gate_mask  (8 bits, bit N = gate N)
+ *     [19:8]  dac[0]     (12 bits)
+ *     [31:20] dac[1]     (12 bits)
+ *     ...
+ *     [103:92] dac[7]    (12 bits)
  *
- *   Total payload: 2 + 16 = 18 bytes
- *   Total message: 4 (header) + 18 (payload) + 1 (F7) = 23 bytes
+ *   ceil(104/7) = 15 data bytes
+ *   Total message: 4 (header) + 15 (payload) + 1 (F7) = 20 bytes
  */
 
-#define TRAM8_STATE_MSG_LEN 23
-
-static inline uint8_t tram8_dac_lo(uint16_t dac) {
-  return (uint8_t)(dac & 0x7F);
-}
-
-static inline uint8_t tram8_dac_hi(uint16_t dac) {
-  return (uint8_t)((dac >> 7) & 0x1F);
-}
-
-static inline uint16_t tram8_dac_unpack(uint8_t lo, uint8_t hi) {
-  return (uint16_t)((hi & 0x1F) << 7) | (lo & 0x7F);
-}
+#define TRAM8_STATE_MSG_LEN 20
 
 static inline void tram8_pack_state(uint8_t* buf, uint8_t gate_mask, const uint16_t dac[8]) {
   buf[0] = TRAM8_SYSEX_START;
   buf[1] = TRAM8_MANUFACTURER_ID;
   buf[2] = TRAM8_DEVICE_ID;
   buf[3] = TRAM8_CMD_STATE;
-  buf[4] = gate_mask & 0x7F;
-  buf[5] = (gate_mask >> 7) & 0x01;
+
+  uint32_t acc = gate_mask;
+  uint8_t bits = 8;
+  uint8_t pos = 4;
+
   for (int i = 0; i < 8; i++) {
-    buf[6 + i * 2] = tram8_dac_lo(dac[i]);
-    buf[6 + i * 2 + 1] = tram8_dac_hi(dac[i]);
+    acc |= (uint32_t)(dac[i] & 0xFFF) << bits;
+    bits += 12;
+    while (bits >= 7) {
+      buf[pos++] = (uint8_t)(acc & 0x7F);
+      acc >>= 7;
+      bits -= 7;
+    }
   }
-  buf[22] = TRAM8_SYSEX_END;
+
+  if (bits > 0)
+    buf[pos++] = (uint8_t)(acc & 0x7F);
+
+  buf[pos] = TRAM8_SYSEX_END;
 }
 
 static inline int tram8_parse_state(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]) {
@@ -84,13 +85,31 @@ static inline int tram8_parse_state(const uint8_t* buf, uint8_t len, uint8_t* ga
     return -1;
   if (buf[3] != TRAM8_CMD_STATE)
     return -1;
-  if (buf[22] != TRAM8_SYSEX_END)
+  if (buf[TRAM8_STATE_MSG_LEN - 1] != TRAM8_SYSEX_END)
     return -1;
 
-  *gate_mask = (uint8_t)(((buf[5] & 0x01) << 7) | (buf[4] & 0x7F));
-  for (int i = 0; i < 8; i++) {
-    dac[i] = tram8_dac_unpack(buf[6 + i * 2], buf[6 + i * 2 + 1]);
+  uint32_t acc = 0;
+  uint8_t bits = 0;
+  uint8_t pos = 4;
+
+  while (bits < 8) {
+    acc |= (uint32_t)buf[pos++] << bits;
+    bits += 7;
   }
+  *gate_mask = (uint8_t)(acc & 0xFF);
+  acc >>= 8;
+  bits -= 8;
+
+  for (int i = 0; i < 8; i++) {
+    while (bits < 12) {
+      acc |= (uint32_t)buf[pos++] << bits;
+      bits += 7;
+    }
+    dac[i] = (uint16_t)(acc & 0xFFF);
+    acc >>= 12;
+    bits -= 12;
+  }
+
   return 0;
 }
 
