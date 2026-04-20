@@ -1,27 +1,22 @@
 # tram8+
 
-VST3 plugin and firmware for the Tram8 hardware module. Bridges a DAW to 8 CV/gate outputs via packed SysEx over MIDI.
+Custom firmware for the [TRAM8](https://github.com/kay-lpzw/TRAM8) MIDI-to-CV module. Adds multiple operating modes, MIDI learn, and a packed SysEx protocol for direct DAW control. Also includes an optional VST3 plugin for bridging a DAW to the hardware.
 
-![tram8+ VST UI](assets/vst-ui.png)
+## Firmware Modes
 
-## Architecture
+| Mode | Description |
+|------|-------------|
+| Velocity | Gate on/off from note events, DAC outputs note velocity as 0–5V |
+| CC | Gate on/off from note events, DAC tracks a configurable MIDI CC as 0–5V |
+| SysEx | Direct control of all 8 gates and 12-bit DAC values via packed SysEx messages |
 
-- **VST3 Plugin** — receives MIDI note/CC events from the DAW, converts to packed SysEx messages, sends via CoreMIDI to the hardware
-- **Firmware** — AVR-based, receives SysEx and drives 8 gate outputs + 12-bit DAC (MAX5825) for CV
-- **Protocol** — shared header (`protocol/tram8_sysex.h`) defines the 7-bit packed message format
-
-## DAC Modes
-
-Each gate has an independent DAC mode:
-
-| Mode | DAC Output |
-|------|-----------|
-| Velocity | Note velocity scaled to 0–5V |
-| Pitch | 1V/oct from MIDI note number |
-| CC | MIDI CC value scaled to 0–5V |
-| Off | 0V |
+Each gate can be independently configured with a MIDI channel and note filter.
 
 ## Building
+
+### Firmware
+
+Requires `avr-gcc` toolchain. See `firmware/Makefile`.
 
 ### VST3 Plugin (macOS)
 
@@ -31,9 +26,13 @@ XCODE_VERSION=15.0 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release --target tram8-bridge
 ```
 
-### Firmware
+## VST3 Plugin
 
-Requires `avr-gcc` toolchain. See `firmware/Makefile`.
+Optional companion plugin that receives MIDI in the DAW and sends packed SysEx to the hardware via CoreMIDI. Per-gate configuration of channel, note, and DAC mode (velocity, pitch, CC, off).
+
+<p align="center">
+  <img src="assets/vst-ui.png" alt="tram8+ VST UI" width="560">
+</p>
 
 ## Project Structure
 
