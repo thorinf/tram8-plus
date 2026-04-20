@@ -1,0 +1,5 @@
+if(MSVC)
+  target_compile_options(tram8-bridge PRIVATE /W3)
+else()
+  target_compile_options(tram8-bridge PRIVATE -Wall -Wextra -Wno-unused-parameter)
+endif()

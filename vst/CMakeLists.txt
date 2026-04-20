@@ -6,6 +6,10 @@ project(tram8-bridge
   LANGUAGES CXX OBJCXX
 )
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 add_subdirectory(external)
 smtg_enable_vst3_sdk()
 
@@ -26,20 +30,5 @@ target_link_libraries(tram8-bridge
     sdk
 )
 
-if(SMTG_MAC)
-  target_link_libraries(tram8-bridge
-    PRIVATE
-      "-framework CoreMIDI"
-      "-framework CoreFoundation"
-      "-framework Cocoa"
-      "-framework WebKit"
-  )
-  smtg_target_set_bundle(tram8-bridge
-    BUNDLE_IDENTIFIER com.thorinf.tram8bridge
-    COMPANY_NAME "thorinf"
-  )
-  smtg_target_add_plugin_resources(tram8-bridge
-    RESOURCES
-      "${CMAKE_CURRENT_SOURCE_DIR}/resource/ui.html"
-  )
-endif()
+include(cmake/warnings.cmake)
+include(cmake/platform.cmake)
