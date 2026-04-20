@@ -290,9 +290,20 @@ bool Processor::stateChanged() const {
 }
 
 void Processor::sendState() {
-  uint8_t buf[TRAM8_STATE_MSG_LEN];
-  tram8_pack_state(buf, gateMask, dacValues);
-  if (!sendBytes(buf, TRAM8_STATE_MSG_LEN))
+  tram8_form_t form = TRAM8_FORM_GATES;
+  if (gateMask) {
+    form = TRAM8_FORM_COARSE;
+    for (int g = 0; g < TRAM8_NUM_GATES; g++) {
+      if ((gateMask & (1 << g)) && dacMode[g] == kDacPitch) {
+        form = TRAM8_FORM_FULL;
+        break;
+      }
+    }
+  }
+
+  uint8_t buf[TRAM8_V2_LEN_FULL];
+  uint8_t len = tram8_pack_v2(buf, gateMask, dacValues, form);
+  if (!sendBytes(buf, len))
     return;
 
   prevGateMask = gateMask;
