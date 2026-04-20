@@ -1,5 +1,55 @@
 BasedOnStyle: LLVM
+IndentWidth: 2
 ColumnLimit: 120
-AllowShortIfStatementsOnASingleLine: true
-AllowShortBlocksOnASingleLine: Always
-AllowShortFunctionsOnASingleLine: All
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+DerivePointerAlignment: false
+Standard: c++17
+AccessModifierOffset: -1
+
+# Function/block formatting
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: All
+
+# Parameters: one per line, aligned to opening bracket
+BinPackParameters: false
+BinPackArguments: false
+AlignAfterOpenBracket: Align
+
+# Alignment
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignOperands: Align
+AlignTrailingComments: false
+
+# Includes
+SortIncludes: false
+
+# Templates and constructors
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeColon
+BreakBeforeTernaryOperators: true
+
+# Namespaces
+CompactNamespaces: false
+FixNamespaceComments: true
+NamespaceIndentation: None
+
+# Spacing
+SpacesInAngles: Never
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpacesBeforeTrailingComments: 1
+
+# Misc
+Cpp11BracedListStyle: true
+IndentCaseLabels: true
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+ReflowComments: true
+UseTab: Never

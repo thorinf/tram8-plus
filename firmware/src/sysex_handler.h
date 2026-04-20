@@ -10,14 +10,18 @@ typedef struct {
   uint8_t len;
 } SysexAccumulator;
 
-static inline void sysex_acc_init(SysexAccumulator *acc) { acc->len = 0; }
+static inline void sysex_acc_init(SysexAccumulator* acc) {
+  acc->len = 0;
+}
 
 // Feed a byte. Returns 1 when a complete message is ready in acc->buf.
 // Returns -1 if the message was cancelled (non-realtime status byte).
 // Returns 0 if still accumulating.
-static inline int8_t sysex_acc_feed(SysexAccumulator *acc, uint8_t b) {
+static inline int8_t sysex_acc_feed(SysexAccumulator* acc, uint8_t b) {
   if (b == 0xF7) {
-    if (acc->len < SYSEX_BUF_SIZE) { acc->buf[acc->len++] = b; }
+    if (acc->len < SYSEX_BUF_SIZE) {
+      acc->buf[acc->len++] = b;
+    }
     return 1; // complete
   }
 
@@ -31,7 +35,9 @@ static inline int8_t sysex_acc_feed(SysexAccumulator *acc, uint8_t b) {
   }
 
   // data byte
-  if (acc->len < SYSEX_BUF_SIZE) { acc->buf[acc->len++] = b; }
+  if (acc->len < SYSEX_BUF_SIZE) {
+    acc->buf[acc->len++] = b;
+  }
   return 0;
 }
 

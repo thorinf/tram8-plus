@@ -24,7 +24,7 @@ extern "C" {
 #define TRAM8_MANUFACTURER_ID 0x7D
 #define TRAM8_DEVICE_ID 0x01
 
-#define TRAM8_CMD_STATE 0x01    /* full state update (gates + DACs) */
+#define TRAM8_CMD_STATE 0x01 /* full state update (gates + DACs) */
 #define TRAM8_CMD_GATE_OFF 0x02 /* single gate off (legacy) */
 
 #define TRAM8_NUM_GATES 8
@@ -46,13 +46,19 @@ extern "C" {
 
 #define TRAM8_STATE_MSG_LEN 22
 
-static inline uint8_t tram8_dac_lo(uint16_t dac) { return (uint8_t)(dac & 0x7F); }
+static inline uint8_t tram8_dac_lo(uint16_t dac) {
+  return (uint8_t)(dac & 0x7F);
+}
 
-static inline uint8_t tram8_dac_hi(uint16_t dac) { return (uint8_t)((dac >> 7) & 0x1F); }
+static inline uint8_t tram8_dac_hi(uint16_t dac) {
+  return (uint8_t)((dac >> 7) & 0x1F);
+}
 
-static inline uint16_t tram8_dac_unpack(uint8_t lo, uint8_t hi) { return (uint16_t)((hi & 0x1F) << 7) | (lo & 0x7F); }
+static inline uint16_t tram8_dac_unpack(uint8_t lo, uint8_t hi) {
+  return (uint16_t)((hi & 0x1F) << 7) | (lo & 0x7F);
+}
 
-static inline void tram8_pack_state(uint8_t *buf, uint8_t gate_mask, const uint16_t dac[8]) {
+static inline void tram8_pack_state(uint8_t* buf, uint8_t gate_mask, const uint16_t dac[8]) {
   buf[0] = TRAM8_SYSEX_START;
   buf[1] = TRAM8_MANUFACTURER_ID;
   buf[2] = TRAM8_DEVICE_ID;
@@ -65,13 +71,19 @@ static inline void tram8_pack_state(uint8_t *buf, uint8_t gate_mask, const uint1
   buf[21] = TRAM8_SYSEX_END;
 }
 
-static inline int tram8_parse_state(const uint8_t *buf, uint8_t len, uint8_t *gate_mask, uint16_t dac[8]) {
-  if (len < TRAM8_STATE_MSG_LEN) return -1;
-  if (buf[0] != TRAM8_SYSEX_START) return -1;
-  if (buf[1] != TRAM8_MANUFACTURER_ID) return -1;
-  if (buf[2] != TRAM8_DEVICE_ID) return -1;
-  if (buf[3] != TRAM8_CMD_STATE) return -1;
-  if (buf[21] != TRAM8_SYSEX_END) return -1;
+static inline int tram8_parse_state(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]) {
+  if (len < TRAM8_STATE_MSG_LEN)
+    return -1;
+  if (buf[0] != TRAM8_SYSEX_START)
+    return -1;
+  if (buf[1] != TRAM8_MANUFACTURER_ID)
+    return -1;
+  if (buf[2] != TRAM8_DEVICE_ID)
+    return -1;
+  if (buf[3] != TRAM8_CMD_STATE)
+    return -1;
+  if (buf[21] != TRAM8_SYSEX_END)
+    return -1;
 
   *gate_mask = buf[4];
   for (int i = 0; i < 8; i++) {
