@@ -6,7 +6,7 @@ TEST_DIR = .
 MIDI_PARSER_SRC = $(SRC_DIR)/midi_parser.c
 UI_SRC = $(SRC_DIR)/ui.c
 
-TESTS = test_midi_parser test_button
+TESTS = test_midi_parser test_button test_sysex
 
 .PHONY: all clean test
 
@@ -16,12 +16,16 @@ test: all
 	@echo "Running tests..."
 	@./test_midi_parser
 	@./test_button
+	@./test_sysex
 	@echo "All tests completed!"
 
 test_midi_parser: test_midi_parser.c $(MIDI_PARSER_SRC)
 	$(CC) $(CFLAGS) -o $@ $^
 
 test_button: test_button.c $(UI_SRC)
+	$(CC) $(CFLAGS) -o $@ $^
+
+test_sysex: test_sysex.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
