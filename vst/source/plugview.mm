@@ -313,13 +313,21 @@ uint32 PLUGIN_API PlugView::release() {
 }
 
 void PlugView::flashMidiInput() {
-  if (webView)
-    [webView evaluateJavaScript:@"tram8.flashInput()" completionHandler:nil];
+  WKWebView* wv = webView;
+  if (wv) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [wv evaluateJavaScript:@"tram8.flashInput()" completionHandler:nil];
+    });
+  }
 }
 
 void PlugView::flashMidiOutput() {
-  if (webView)
-    [webView evaluateJavaScript:@"tram8.flashOutput()" completionHandler:nil];
+  WKWebView* wv = webView;
+  if (wv) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [wv evaluateJavaScript:@"tram8.flashOutput()" completionHandler:nil];
+    });
+  }
 }
 
 } // namespace tram8
