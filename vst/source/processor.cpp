@@ -131,10 +131,10 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     }
   }
 
-  if (!data.inputEvents)
-    return kResultOk;
+  bool hadInput = false;
+  int32 eventCount = data.inputEvents ? data.inputEvents->getEventCount() : 0;
+  hadInput = eventCount > 0;
 
-  int32 eventCount = data.inputEvents->getEventCount();
   for (int32 i = 0; i < eventCount; i++) {
     Event e;
     if (data.inputEvents->getEvent(i, e) != kResultOk)
@@ -180,8 +180,20 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     }
   }
 
-  if (stateChanged()) {
+  bool hadOutput = stateChanged();
+  if (hadOutput)
     sendState();
+
+  if (hadInput || hadOutput) {
+    if (auto* msg = allocateMessage()) {
+      msg->setMessageID("MidiActivity");
+      if (hadInput)
+        msg->getAttributes()->setInt("input", 1);
+      if (hadOutput)
+        msg->getAttributes()->setInt("output", 1);
+      sendMessage(msg);
+      msg->release();
+    }
   }
 
   return kResultOk;

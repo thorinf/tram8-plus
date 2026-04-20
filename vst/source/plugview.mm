@@ -1,5 +1,6 @@
 #include "plugview.h"
 #include "cids.h"
+#include "controller.h"
 #include "ui_html.h"
 #include "pluginterfaces/gui/iplugview.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
@@ -217,6 +218,7 @@ tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
 }
 
 tresult PLUGIN_API PlugView::removed() {
+  static_cast<Controller*>(controller)->setActiveView(nullptr);
   if (webView) {
     [webView.configuration.userContentController removeScriptMessageHandlerForName:@"tram8"];
     [webView removeFromSuperview];
@@ -308,6 +310,16 @@ uint32 PLUGIN_API PlugView::release() {
     return 0;
   }
   return prev - 1;
+}
+
+void PlugView::flashMidiInput() {
+  if (webView)
+    [webView evaluateJavaScript:@"tram8.flashInput()" completionHandler:nil];
+}
+
+void PlugView::flashMidiOutput() {
+  if (webView)
+    [webView evaluateJavaScript:@"tram8.flashOutput()" completionHandler:nil];
 }
 
 } // namespace tram8
