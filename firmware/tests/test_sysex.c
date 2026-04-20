@@ -161,6 +161,120 @@ static void test_roundtrip_each_dac(void) {
   printf("roundtrip_each_dac passed\n");
 }
 
+/* --- v2 protocol tests --- */
+
+static void test_v2_gates_only(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8] = {100, 200, 300, 400, 500, 600, 700, 800};
+
+  uint8_t len = tram8_pack_v2(buf, 0xA5, dac_in, TRAM8_FORM_GATES);
+  assert(len == 6);
+  assert(buf[0] == 0xF0);
+  assert(buf[1] == 0x7D);
+  assert(buf[2] == 0x10);
+  assert(buf[5] == 0xF7);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8] = {0};
+  tram8_form_t form;
+  assert(tram8_parse_v2(buf, len, &gate_out, dac_out, &form) == 0);
+  assert(gate_out == 0xA5);
+  assert(form == TRAM8_FORM_GATES);
+
+  printf("v2_gates_only passed\n");
+}
+
+static void test_v2_coarse_roundtrip(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8];
+  for (int i = 0; i < 8; i++)
+    dac_in[i] = (uint16_t)(i * 500);
+
+  uint8_t len = tram8_pack_v2(buf, 0xFF, dac_in, TRAM8_FORM_COARSE);
+  assert(len == 14);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8];
+  tram8_form_t form;
+  assert(tram8_parse_v2(buf, len, &gate_out, dac_out, &form) == 0);
+  assert(gate_out == 0xFF);
+  assert(form == TRAM8_FORM_COARSE);
+
+  for (int i = 0; i < 8; i++) {
+    uint16_t expected = dac_in[i] & 0xFE0;
+    assert(dac_out[i] == expected);
+  }
+
+  printf("v2_coarse_roundtrip passed\n");
+}
+
+static void test_v2_full_roundtrip(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8] = {0x000, 0xFFF, 0x123, 0x456, 0x789, 0xABC, 0x001, 0x800};
+
+  uint8_t len = tram8_pack_v2(buf, 0xA5, dac_in, TRAM8_FORM_FULL);
+  assert(len == 20);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8];
+  tram8_form_t form;
+  assert(tram8_parse_v2(buf, len, &gate_out, dac_out, &form) == 0);
+  assert(gate_out == 0xA5);
+  assert(form == TRAM8_FORM_FULL);
+
+  for (int i = 0; i < 8; i++)
+    assert(dac_out[i] == dac_in[i]);
+
+  printf("v2_full_roundtrip passed\n");
+}
+
+static void test_v2_gate8_bit7(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8] = {0};
+
+  tram8_pack_v2(buf, 0x80, dac_in, TRAM8_FORM_GATES);
+  assert(buf[3] == 0x00);
+  assert(buf[4] == 0x01);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8];
+  tram8_form_t form;
+  assert(tram8_parse_v2(buf, TRAM8_V2_LEN_GATES, &gate_out, dac_out, &form) == 0);
+  assert(gate_out == 0x80);
+
+  printf("v2_gate8_bit7 passed\n");
+}
+
+static void test_v2_all_data_bytes_7bit(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8];
+  for (int i = 0; i < 8; i++)
+    dac_in[i] = TRAM8_DAC_MAX;
+
+  uint8_t len = tram8_pack_v2(buf, 0x7F, dac_in, TRAM8_FORM_FULL);
+
+  for (int i = 1; i < len - 1; i++)
+    assert(buf[i] <= 0x7F);
+
+  printf("v2_all_data_bytes_7bit passed\n");
+}
+
+static void test_v2_velocity_precision(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8] = {0};
+  dac_in[0] = 127 << 5;
+
+  uint8_t len = tram8_pack_v2(buf, 0x01, dac_in, TRAM8_FORM_COARSE);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8];
+  tram8_form_t form;
+  assert(tram8_parse_v2(buf, len, &gate_out, dac_out, &form) == 0);
+  assert(dac_out[0] == 127 << 5);
+
+  printf("v2_velocity_precision passed\n");
+}
+
 int main(void) {
   printf("Running SysEx protocol tests...\n");
 
@@ -175,6 +289,15 @@ int main(void) {
   test_roundtrip_each_gate();
   test_roundtrip_each_dac();
 
-  printf("All SysEx protocol tests passed!\n");
+  printf("\nRunning v2 protocol tests...\n");
+
+  test_v2_gates_only();
+  test_v2_coarse_roundtrip();
+  test_v2_full_roundtrip();
+  test_v2_gate8_bit7();
+  test_v2_all_data_bytes_7bit();
+  test_v2_velocity_precision();
+
+  printf("\nAll SysEx protocol tests passed!\n");
   return 0;
 }
