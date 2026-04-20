@@ -174,7 +174,8 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         bool noteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
         if (chMatch && noteMatch) {
           gateMask &= ~(1 << g);
-          dacValues[g] = 0;
+          if (dacMode[g] == kDacVelocity)
+            dacValues[g] = 0;
         }
       }
     }
@@ -290,8 +291,10 @@ bool Processor::stateChanged() const {
 }
 
 void Processor::sendState() {
+  bool dacChanged = memcmp(dacValues, prevDacValues, sizeof(dacValues)) != 0;
+
   tram8_form_t form = TRAM8_FORM_GATES;
-  if (gateMask) {
+  if (gateMask && dacChanged) {
     form = TRAM8_FORM_COARSE;
     for (int g = 0; g < TRAM8_NUM_GATES; g++) {
       if ((gateMask & (1 << g)) && dacMode[g] == kDacPitch) {
