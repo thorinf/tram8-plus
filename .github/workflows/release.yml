@@ -52,7 +52,9 @@ jobs:
           cmake --build vst/build --config Release --target tram8-bridge
 
       - name: Package VST3 bundle
-        run: ditto -c -k --sequesterRsrc vst/build/VST3/Release/tram8-bridge.vst3 tram8-bridge.vst3.zip
+        run: |
+          VST3_DIR=$(find vst/build -name "tram8-bridge.vst3" -type d | head -1)
+          ditto -c -k --sequesterRsrc "$VST3_DIR" tram8-bridge.vst3.zip
 
       - uses: actions/upload-artifact@v4
         with:
