@@ -3,6 +3,8 @@
 #include "../../protocol/tram8_sysex.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 
+#include <atomic>
+
 #ifdef __APPLE__
 #include <CoreMIDI/CoreMIDI.h>
 #include <os/log.h>
@@ -93,7 +95,7 @@ class Processor : public Steinberg::Vst::AudioEffect {
 #ifdef __APPLE__
   MIDIClientRef midiClient = 0;
   MIDIPortRef midiOutPort = 0;
-  MIDIEndpointRef midiDest = 0;
+  std::atomic<MIDIEndpointRef> midiDest{0};
   os_log_t logger = nullptr;
 #endif
 

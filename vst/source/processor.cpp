@@ -300,7 +300,6 @@ void Processor::updateDac(int g, int16_t note, uint8_t velocity) {
       dacValues[g] = (uint16_t)ccValues[ccNum[g]] << 7;
       break;
     case kDacOff:
-      dacValues[g] = 0;
       break;
     default:
       dacValues[g] = (uint16_t)velocity << 7;
