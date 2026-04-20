@@ -95,27 +95,22 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         int gate = id - kGateChannelBase;
         int step = (int)(value * 16 + 0.5);
         filters[gate].channel = (step == 0) ? -1 : (int8_t)(step - 1);
-        os_log(logger, "gate %d channel -> %d", gate, filters[gate].channel);
       } else if (id >= kGateNoteBase && id < kGateNoteBase + TRAM8_NUM_GATES) {
         int gate = id - kGateNoteBase;
         int step = (int)(value * 128 + 0.5);
         filters[gate].note = (step == 0) ? -1 : (int16_t)(step - 1);
-        os_log(logger, "gate %d note -> %d", gate, filters[gate].note);
       } else if (id >= kDacModeBase && id < kDacModeBase + TRAM8_NUM_GATES) {
         int gate = id - kDacModeBase;
         int step = (int)(value * (kDacModeCount - 1) + 0.5);
         dacMode[gate] = (uint8_t)step;
-        os_log(logger, "gate %d dac mode -> %d", gate, dacMode[gate]);
       } else if (id >= kDacChannelBase && id < kDacChannelBase + TRAM8_NUM_GATES) {
         int gate = id - kDacChannelBase;
         int step = (int)(value * 16 + 0.5);
         dacChannel[gate] = (step == 0) ? -1 : (int8_t)(step - 1);
-        os_log(logger, "gate %d dac channel -> %d", gate, dacChannel[gate]);
       } else if (id >= kCcNumBase && id < kCcNumBase + TRAM8_NUM_GATES) {
         int gate = id - kCcNumBase;
         int step = (int)(value * 127 + 0.5);
         ccNum[gate] = (uint8_t)step;
-        os_log(logger, "gate %d cc num -> %d", gate, ccNum[gate]);
       } else if (id >= kCcValueBase && id < kCcValueBase + 128) {
         int cc = id - kCcValueBase;
         uint8_t val = (uint8_t)(value * 127 + 0.5);
@@ -171,7 +166,6 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
               dacValues[g] = (uint16_t)(e.noteOn.velocity * (float)TRAM8_DAC_MAX);
               break;
           }
-          os_log(logger, "gate %d ON  dac=%d mode=%d", g, dacValues[g], dacMode[g]);
         }
       }
     } else if (e.type == Event::kNoteOffEvent) {
@@ -181,7 +175,6 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         if (chMatch && noteMatch) {
           gateMask &= ~(1 << g);
           dacValues[g] = 0;
-          os_log(logger, "gate %d OFF", g);
         }
       }
     }
@@ -269,7 +262,8 @@ bool Processor::stateChanged() const {
 void Processor::sendState() {
   uint8_t buf[TRAM8_STATE_MSG_LEN];
   tram8_pack_state(buf, gateMask, dacValues);
-  sendBytes(buf, TRAM8_STATE_MSG_LEN);
+  if (!sendBytes(buf, TRAM8_STATE_MSG_LEN))
+    return;
 
   prevGateMask = gateMask;
   memcpy(prevDacValues, dacValues, sizeof(dacValues));
@@ -325,23 +319,26 @@ void Processor::closeMidiOutput() {
   midiDest = 0;
 }
 
-void Processor::sendBytes(const uint8_t* data, uint32_t length) {
+bool Processor::sendBytes(const uint8_t* data, uint32_t length) {
   if (!midiOutPort || !midiDest)
-    return;
+    return false;
 
   uint8_t buf[512];
   MIDIPacketList* packetList = (MIDIPacketList*)buf;
   MIDIPacket* packet = MIDIPacketListInit(packetList);
   packet = MIDIPacketListAdd(packetList, sizeof(buf), packet, 0, length, data);
-  if (packet) {
-    MIDISend(midiOutPort, midiDest, packetList);
-  }
+  if (!packet)
+    return false;
+
+  return MIDISend(midiOutPort, midiDest, packetList) == noErr;
 }
 
 #else
 void Processor::openMidiOutput() {}
 void Processor::closeMidiOutput() {}
-void Processor::sendBytes(const uint8_t*, uint32_t) {}
+bool Processor::sendBytes(const uint8_t*, uint32_t) {
+  return false;
+}
 #endif
 
 } // namespace tram8
