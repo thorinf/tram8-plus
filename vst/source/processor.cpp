@@ -294,10 +294,10 @@ void Processor::sendState() {
   bool dacChanged = memcmp(dacValues, prevDacValues, sizeof(dacValues)) != 0;
 
   tram8_form_t form = TRAM8_FORM_GATES;
-  if (gateMask && dacChanged) {
+  if (dacChanged) {
     form = TRAM8_FORM_COARSE;
     for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-      if ((gateMask & (1 << g)) && dacMode[g] == kDacPitch) {
+      if (dacMode[g] == kDacPitch) {
         form = TRAM8_FORM_FULL;
         break;
       }
