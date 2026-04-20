@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "pluginterfaces/base/funknown.h"
 #include "pluginterfaces/gui/iplugview.h"
 
@@ -50,7 +52,7 @@ class PlugView : public Steinberg::IPlugView {
   void resizeTo(int width, int height);
 
  private:
-  Steinberg::uint32 refCount = 1;
+  std::atomic<Steinberg::uint32> refCount = 1;
   Steinberg::IPlugFrame* plugFrame = nullptr;
   Steinberg::Vst::EditController* controller = nullptr;
   WKWebView* webView = nullptr;
