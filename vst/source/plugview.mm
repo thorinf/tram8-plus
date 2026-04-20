@@ -71,6 +71,31 @@ namespace tram8 { class PlugView; }
     return;
   }
 
+  if ([type isEqualToString:@"setDacChannel"]) {
+    int gate = [body[@"gate"] intValue];
+    int channel = [body[@"channel"] intValue];
+    int step = (channel == -1) ? 0 : (channel + 1);
+    double norm = step / 16.0;
+    ParamID pid = tram8::kDacChannelBase + gate;
+    _controller->beginEdit(pid);
+    _controller->performEdit(pid, norm);
+    _controller->setParamNormalized(pid, norm);
+    _controller->endEdit(pid);
+    return;
+  }
+
+  if ([type isEqualToString:@"setCcNum"]) {
+    int gate = [body[@"gate"] intValue];
+    int cc = [body[@"cc"] intValue];
+    double norm = cc / 127.0;
+    ParamID pid = tram8::kCcNumBase + gate;
+    _controller->beginEdit(pid);
+    _controller->performEdit(pid, norm);
+    _controller->setParamNormalized(pid, norm);
+    _controller->endEdit(pid);
+    return;
+  }
+
   if ([type isEqualToString:@"setMidiPort"]) {
     int index = [body[@"index"] intValue];
     if (auto* msg = _controller->allocateMessage()) {
@@ -124,8 +149,15 @@ namespace tram8 { class PlugView; }
     double modeNorm = _controller->getParamNormalized(tram8::kDacModeBase + i);
     int mode = (int)(modeNorm * (tram8::kDacModeCount - 1) + 0.5);
 
+    double dacChNorm = _controller->getParamNormalized(tram8::kDacChannelBase + i);
+    int dacChStep = (int)(dacChNorm * 16 + 0.5);
+    int dacCh = (dacChStep == 0) ? -1 : (dacChStep - 1);
+
+    double ccNorm = _controller->getParamNormalized(tram8::kCcNumBase + i);
+    int ccN = (int)(ccNorm * 127 + 0.5);
+
     NSString* js = [NSString stringWithFormat:
-      @"tram8.setGateState(%d, %d, %d, %d)", i, channel, note, mode];
+      @"tram8.setGateState(%d, %d, %d, %d, %d, %d)", i, channel, note, mode, dacCh, ccN];
     [_webView evaluateJavaScript:js completionHandler:nil];
   }
 }

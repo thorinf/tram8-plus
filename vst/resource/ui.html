@@ -205,8 +205,10 @@ const tram8 = {
     }
   },
 
-  setGateState(gate, ch, note, mode) {
-    Object.assign(this.gates[gate], {channel:ch, note, mode});
+  setGateState(gate, ch, note, mode, dacCh, ccN) {
+    Object.assign(this.gates[gate], {channel:ch, note, mode,
+      dacChannel: dacCh !== undefined ? dacCh : this.gates[gate].dacChannel,
+      ccNum: ccN !== undefined ? ccN : this.gates[gate].ccNum});
     this.renderGates();
     this.renderPanel();
   },

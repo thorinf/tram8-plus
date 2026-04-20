@@ -11,12 +11,16 @@ enum ParamIDs : Steinberg::Vst::ParamID {
   kGateChannelBase = 100, // 100-107
   kGateNoteBase = 200,    // 200-207
   kDacModeBase = 300,     // 300-307
+  kDacChannelBase = 400,  // 400-407
+  kCcNumBase = 500,       // 500-507
+  kCcValueBase = 600,     // 600-727 (one per CC 0-127)
 };
 
 enum DacMode {
   kDacVelocity = 0,
   kDacPitch = 1,
-  kDacOff = 2,
-  kDacModeCount = 3,
+  kDacCC = 2,
+  kDacOff = 3,
+  kDacModeCount = 4,
 };
 } // namespace tram8

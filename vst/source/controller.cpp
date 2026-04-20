@@ -48,8 +48,43 @@ tresult PLUGIN_API Controller::initialize(FUnknown *context) {
     auto *modeParam = new StringListParameter(STR16("DAC Mode"), kDacModeBase + i);
     modeParam->appendString(STR16("Velocity"));
     modeParam->appendString(STR16("Pitch"));
+    modeParam->appendString(STR16("CC"));
     modeParam->appendString(STR16("Off"));
     parameters.addParameter(modeParam);
+
+    auto *dacChParam = new StringListParameter(STR16("DAC Channel"), kDacChannelBase + i);
+    dacChParam->appendString(STR16("Any"));
+    for (int ch = 1; ch <= 16; ch++) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "Ch %d", ch);
+      String128 s;
+      Steinberg::String str(buf);
+      str.copyTo16(s, 0, 127);
+      dacChParam->appendString(s);
+    }
+    parameters.addParameter(dacChParam);
+
+    auto *ccParam = new StringListParameter(STR16("CC Number"), kCcNumBase + i);
+    for (int cc = 0; cc < 128; cc++) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "CC %d", cc);
+      String128 s;
+      Steinberg::String str(buf);
+      str.copyTo16(s, 0, 127);
+      ccParam->appendString(s);
+    }
+    ccParam->setNormalized(ccParam->toNormalized(1));
+    parameters.addParameter(ccParam);
+  }
+
+  for (int cc = 0; cc < 128; cc++) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "CC %d Value", cc);
+    String128 s;
+    Steinberg::String str(buf);
+    str.copyTo16(s, 0, 127);
+    auto *p = parameters.addParameter(s, nullptr, 0, 0, ParameterInfo::kIsHidden, kCcValueBase + cc);
+    (void)p;
   }
 
   return kResultOk;
@@ -64,10 +99,12 @@ tresult PLUGIN_API Controller::setComponentState(IBStream *state) {
   if (!state) return kResultFalse;
 
   for (int i = 0; i < 8; i++) {
-    int32 chVal = 0, noteVal = 0, modeVal = 0;
+    int32 chVal = 0, noteVal = 0, modeVal = 0, dacChVal = 0, ccNumVal = 0;
     if (state->read(&chVal, sizeof(int32)) != kResultOk) break;
     if (state->read(&noteVal, sizeof(int32)) != kResultOk) break;
     if (state->read(&modeVal, sizeof(int32)) != kResultOk) break;
+    state->read(&dacChVal, sizeof(int32));
+    state->read(&ccNumVal, sizeof(int32));
 
     int chStep = chVal + 1;
     if (chStep < 0) chStep = 0;
@@ -85,9 +122,29 @@ tresult PLUGIN_API Controller::setComponentState(IBStream *state) {
     if (modeVal >= kDacModeCount) modeVal = 0;
     auto *modeParam = parameters.getParameter(kDacModeBase + i);
     if (modeParam) modeParam->setNormalized(modeParam->toNormalized(modeVal));
+
+    int dacChStep = dacChVal + 1;
+    if (dacChStep < 0) dacChStep = 0;
+    if (dacChStep > 16) dacChStep = 16;
+    auto *dacChParam = parameters.getParameter(kDacChannelBase + i);
+    if (dacChParam) dacChParam->setNormalized(dacChParam->toNormalized(dacChStep));
+
+    if (ccNumVal < 0) ccNumVal = 0;
+    if (ccNumVal > 127) ccNumVal = 127;
+    auto *ccParam = parameters.getParameter(kCcNumBase + i);
+    if (ccParam) ccParam->setNormalized(ccParam->toNormalized(ccNumVal));
   }
 
   return kResultOk;
+}
+
+tresult PLUGIN_API Controller::getMidiControllerAssignment(int32 /*busIndex*/, int16 /*channel*/,
+                                                           CtrlNumber midiControllerNumber, ParamID &id) {
+  if (midiControllerNumber >= 0 && midiControllerNumber < 128) {
+    id = kCcValueBase + midiControllerNumber;
+    return kResultOk;
+  }
+  return kResultFalse;
 }
 
 } // namespace tram8

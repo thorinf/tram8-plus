@@ -38,6 +38,9 @@ public:
 private:
   GateFilter filters[TRAM8_NUM_GATES];
   uint8_t dacMode[TRAM8_NUM_GATES] = {};
+  int8_t dacChannel[TRAM8_NUM_GATES] = {};
+  uint8_t ccNum[TRAM8_NUM_GATES] = {};
+  uint8_t ccValues[128] = {};
   uint8_t gateMask = 0;
   uint16_t dacValues[TRAM8_NUM_GATES] = {};
   uint8_t prevGateMask = 0;

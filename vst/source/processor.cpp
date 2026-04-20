@@ -38,6 +38,8 @@ tresult PLUGIN_API Processor::initialize(FUnknown *context) {
   for (int i = 0; i < TRAM8_NUM_GATES; i++) {
     filters[i].channel = -1;
     filters[i].note = 60 + i;
+    dacChannel[i] = -1;
+    ccNum[i] = 1;
   }
 
   openMidiOutput();
@@ -96,6 +98,25 @@ tresult PLUGIN_API Processor::process(ProcessData &data) {
         int step = (int)(value * (kDacModeCount - 1) + 0.5);
         dacMode[gate] = (uint8_t)step;
         os_log(logger, "gate %d dac mode -> %d", gate, dacMode[gate]);
+      } else if (id >= kDacChannelBase && id < kDacChannelBase + TRAM8_NUM_GATES) {
+        int gate = id - kDacChannelBase;
+        int step = (int)(value * 16 + 0.5);
+        dacChannel[gate] = (step == 0) ? -1 : (int8_t)(step - 1);
+        os_log(logger, "gate %d dac channel -> %d", gate, dacChannel[gate]);
+      } else if (id >= kCcNumBase && id < kCcNumBase + TRAM8_NUM_GATES) {
+        int gate = id - kCcNumBase;
+        int step = (int)(value * 127 + 0.5);
+        ccNum[gate] = (uint8_t)step;
+        os_log(logger, "gate %d cc num -> %d", gate, ccNum[gate]);
+      } else if (id >= kCcValueBase && id < kCcValueBase + 128) {
+        int cc = id - kCcValueBase;
+        uint8_t val = (uint8_t)(value * 127 + 0.5);
+        ccValues[cc] = val;
+        for (int g = 0; g < TRAM8_NUM_GATES; g++) {
+          if (dacMode[g] == kDacCC && ccNum[g] == cc && (gateMask & (1 << g))) {
+            dacValues[g] = (uint16_t)(val * (TRAM8_DAC_MAX / 127.0f));
+          }
+        }
       }
     }
   }
@@ -128,6 +149,9 @@ tresult PLUGIN_API Processor::process(ProcessData &data) {
             dacValues[g] = pitchLookup[note] >> 4;
             break;
           }
+          case kDacCC:
+            dacValues[g] = (uint16_t)(ccValues[ccNum[g]] * (TRAM8_DAC_MAX / 127.0f));
+            break;
           case kDacOff:
             dacValues[g] = 0;
             break;
@@ -185,9 +209,13 @@ tresult PLUGIN_API Processor::getState(IBStream *state) {
     int32 ch = filters[i].channel;
     int32 note = filters[i].note;
     int32 mode = dacMode[i];
+    int32 dCh = dacChannel[i];
+    int32 ccN = ccNum[i];
     state->write(&ch, sizeof(int32));
     state->write(&note, sizeof(int32));
     state->write(&mode, sizeof(int32));
+    state->write(&dCh, sizeof(int32));
+    state->write(&ccN, sizeof(int32));
   }
   return kResultOk;
 }
@@ -195,13 +223,17 @@ tresult PLUGIN_API Processor::getState(IBStream *state) {
 tresult PLUGIN_API Processor::setState(IBStream *state) {
   if (!state) return kResultFalse;
   for (int i = 0; i < TRAM8_NUM_GATES; i++) {
-    int32 ch = 0, note = 0, mode = 0;
+    int32 ch = 0, note = 0, mode = 0, dCh = 0, ccN = 0;
     if (state->read(&ch, sizeof(int32)) != kResultOk) break;
     if (state->read(&note, sizeof(int32)) != kResultOk) break;
     if (state->read(&mode, sizeof(int32)) != kResultOk) break;
+    state->read(&dCh, sizeof(int32));
+    state->read(&ccN, sizeof(int32));
     filters[i].channel = (int8_t)ch;
     filters[i].note = (int16_t)note;
     dacMode[i] = (uint8_t)mode;
+    dacChannel[i] = (int8_t)dCh;
+    ccNum[i] = (uint8_t)ccN;
   }
   return kResultOk;
 }
