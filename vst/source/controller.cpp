@@ -35,7 +35,7 @@ tresult PLUGIN_API Controller::initialize(FUnknown* context) {
     auto* noteParam = new StringListParameter(STR16("Note"), kGateNoteBase + i);
     noteParam->appendString(STR16("Any"));
     for (int n = 0; n < 128; n++) {
-      int octave = (n / 12) - 1;
+      int octave = (n / 12) - 2;
       char buf[32];
       snprintf(buf, sizeof(buf), "%s%d (%d)", noteNamesCh[n % 12], octave, n);
       String128 s;
