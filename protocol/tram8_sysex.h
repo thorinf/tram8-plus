@@ -87,7 +87,7 @@ static inline int tram8_parse_state(const uint8_t* buf, uint8_t len, uint8_t* ga
   if (buf[22] != TRAM8_SYSEX_END)
     return -1;
 
-  *gate_mask = (uint8_t)((buf[5] & 0x01) << 7) | (buf[4] & 0x7F);
+  *gate_mask = (uint8_t)(((buf[5] & 0x01) << 7) | (buf[4] & 0x7F));
   for (int i = 0; i < 8; i++) {
     dac[i] = tram8_dac_unpack(buf[6 + i * 2], buf[6 + i * 2 + 1]);
   }
