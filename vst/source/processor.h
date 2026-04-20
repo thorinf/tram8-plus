@@ -57,11 +57,11 @@ class Processor : public Steinberg::Vst::AudioEffect {
   MIDIPortRef midiOutPort = 0;
   MIDIEndpointRef midiDest = 0;
   os_log_t logger = nullptr;
+#endif
 
   void openMidiOutput();
   void closeMidiOutput();
-  void sendBytes(const uint8_t* data, uint32_t length);
-#endif
+  bool sendBytes(const uint8_t* data, uint32_t length);
 };
 
 } // namespace tram8
