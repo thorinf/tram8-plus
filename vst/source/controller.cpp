@@ -93,9 +93,29 @@ tresult PLUGIN_API Controller::initialize(FUnknown* context) {
 
 IPlugView* PLUGIN_API Controller::createView(FIDString name) {
   if (strcmp(name, ViewType::kEditor) == 0) {
-    return new PlugView(this);
+    auto* view = new PlugView(this);
+    activeView = view;
+    return view;
   }
   return nullptr;
+}
+
+tresult PLUGIN_API Controller::notify(IMessage* message) {
+  if (!message)
+    return kInvalidArgument;
+
+  if (strcmp(message->getMessageID(), "MidiActivity") == 0) {
+    if (activeView) {
+      int64 val = 0;
+      if (message->getAttributes()->getInt("input", val) == kResultOk && val)
+        activeView->flashMidiInput();
+      if (message->getAttributes()->getInt("output", val) == kResultOk && val)
+        activeView->flashMidiOutput();
+    }
+    return kResultOk;
+  }
+
+  return EditController::notify(message);
 }
 
 tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
