@@ -9,11 +9,11 @@ static const Steinberg::FUID kControllerUID(0x7E8F9A0B, 0x1C2D3E4F, 0x5A6B7C8D, 
 
 enum ParamIDs : Steinberg::Vst::ParamID {
   kGateChannelBase = 100, // 100-107
-  kGateNoteBase = 200,    // 200-207
-  kDacModeBase = 300,     // 300-307
-  kDacChannelBase = 400,  // 400-407
-  kCcNumBase = 500,       // 500-507
-  kCcValueBase = 600,     // 600-727 (one per CC 0-127)
+  kGateNoteBase = 200, // 200-207
+  kDacModeBase = 300, // 300-307
+  kDacChannelBase = 400, // 400-407
+  kCcNumBase = 500, // 500-507
+  kCcValueBase = 600, // 600-727 (one per CC 0-127)
 };
 
 enum DacMode {

@@ -12,18 +12,19 @@ using namespace Steinberg::Vst;
 
 // ─── Bridge: WKWebView message handler ──────────────────────────────────
 
-namespace tram8 { class PlugView; }
+namespace tram8 {
+class PlugView;
+}
 
 @interface Tram8WebBridge : NSObject <WKScriptMessageHandler>
-@property (assign) EditController* controller;
-@property (assign) WKWebView* webView;
-@property (assign) tram8::PlugView* plugView;
+@property(assign) EditController* controller;
+@property(assign) WKWebView* webView;
+@property(assign) tram8::PlugView* plugView;
 @end
 
 @implementation Tram8WebBridge
 
-- (void)userContentController:(WKUserContentController*)uc
-      didReceiveScriptMessage:(WKScriptMessage*)message {
+- (void)userContentController:(WKUserContentController*)uc didReceiveScriptMessage:(WKScriptMessage*)message {
   NSDictionary* body = message.body;
   NSString* type = body[@"type"];
 
@@ -110,7 +111,8 @@ namespace tram8 { class PlugView; }
   if ([type isEqualToString:@"resize"]) {
     int height = [body[@"height"] intValue];
     NSLog(@"tram8+: JS resize request height=%d", height);
-    if (_plugView) _plugView->resizeTo(560, height);
+    if (_plugView)
+      _plugView->resizeTo(560, height);
     return;
   }
 }
@@ -156,8 +158,8 @@ namespace tram8 { class PlugView; }
     double ccNorm = _controller->getParamNormalized(tram8::kCcNumBase + i);
     int ccN = (int)(ccNorm * 127 + 0.5);
 
-    NSString* js = [NSString stringWithFormat:
-      @"tram8.setGateState(%d, %d, %d, %d, %d, %d)", i, channel, note, mode, dacCh, ccN];
+    NSString* js =
+        [NSString stringWithFormat:@"tram8.setGateState(%d, %d, %d, %d, %d, %d)", i, channel, note, mode, dacCh, ccN];
     [_webView evaluateJavaScript:js completionHandler:nil];
   }
 }
@@ -182,12 +184,14 @@ PlugView::~PlugView() {
 }
 
 tresult PLUGIN_API PlugView::isPlatformTypeSupported(FIDString type) {
-  if (strcmp(type, kPlatformTypeNSView) == 0) return kResultOk;
+  if (strcmp(type, kPlatformTypeNSView) == 0)
+    return kResultOk;
   return kResultFalse;
 }
 
 tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
-  if (strcmp(type, kPlatformTypeNSView) != 0) return kResultFalse;
+  if (strcmp(type, kPlatformTypeNSView) != 0)
+    return kResultFalse;
 
   NSView* parentView = (__bridge NSView*)parent;
 
@@ -229,7 +233,8 @@ tresult PLUGIN_API PlugView::removed() {
 }
 
 tresult PLUGIN_API PlugView::getSize(ViewRect* size) {
-  if (!size) return kResultFalse;
+  if (!size)
+    return kResultFalse;
   size->left = 0;
   size->top = 0;
   size->right = kWidth;
@@ -238,7 +243,8 @@ tresult PLUGIN_API PlugView::getSize(ViewRect* size) {
 }
 
 tresult PLUGIN_API PlugView::onSize(ViewRect* newSize) {
-  if (!newSize || !webView) return kResultOk;
+  if (!newSize || !webView)
+    return kResultOk;
   int w = newSize->right - newSize->left;
   int h = newSize->bottom - newSize->top;
   NSLog(@"tram8+: onSize w=%d h=%d", w, h);
@@ -247,10 +253,13 @@ tresult PLUGIN_API PlugView::onSize(ViewRect* newSize) {
 }
 
 void PlugView::resizeTo(int width, int height) {
-  if (height < kMinHeight) height = kMinHeight;
-  if (height > kMaxHeight) height = kMaxHeight;
+  if (height < kMinHeight)
+    height = kMinHeight;
+  if (height > kMaxHeight)
+    height = kMaxHeight;
   NSLog(@"tram8+: resizeTo w=%d h=%d (current=%d, plugFrame=%p)", width, height, currentHeight, plugFrame);
-  if (height == currentHeight) return;
+  if (height == currentHeight)
+    return;
 
   if (plugFrame) {
     ViewRect rect = {0, 0, (int32)width, (int32)height};
@@ -270,18 +279,20 @@ tresult PLUGIN_API PlugView::setFrame(IPlugFrame* frame) {
 }
 
 tresult PLUGIN_API PlugView::checkSizeConstraint(ViewRect* rect) {
-  if (!rect) return kResultFalse;
+  if (!rect)
+    return kResultFalse;
   rect->left = 0;
   rect->top = 0;
   rect->right = kWidth;
-  if (rect->bottom < kMinHeight) rect->bottom = kMinHeight;
-  if (rect->bottom > kMaxHeight) rect->bottom = kMaxHeight;
+  if (rect->bottom < kMinHeight)
+    rect->bottom = kMinHeight;
+  if (rect->bottom > kMaxHeight)
+    rect->bottom = kMaxHeight;
   return kResultOk;
 }
 
 tresult PLUGIN_API PlugView::queryInterface(const TUID iid, void** obj) {
-  if (FUnknownPrivate::iidEqual(iid, IPlugView::iid) ||
-      FUnknownPrivate::iidEqual(iid, FUnknown::iid)) {
+  if (FUnknownPrivate::iidEqual(iid, IPlugView::iid) || FUnknownPrivate::iidEqual(iid, FUnknown::iid)) {
     addRef();
     *obj = static_cast<IPlugView*>(this);
     return kResultOk;
@@ -302,4 +313,4 @@ uint32 PLUGIN_API PlugView::release() {
   return refCount;
 }
 
-}
+} // namespace tram8

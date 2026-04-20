@@ -21,13 +21,16 @@ const uint16_t Processor::pitchLookup[61] = {
     0xDDD0, 0xE210, 0xE660, 0xEAA0, 0xEEE0, 0xF320, 0xF760, 0xFBB0, 0xFFF0,
 };
 
-Processor::Processor() { setControllerClass(kControllerUID); }
+Processor::Processor() {
+  setControllerClass(kControllerUID);
+}
 
 Processor::~Processor() = default;
 
-tresult PLUGIN_API Processor::initialize(FUnknown *context) {
+tresult PLUGIN_API Processor::initialize(FUnknown* context) {
   tresult result = AudioEffect::initialize(context);
-  if (result != kResultOk) return result;
+  if (result != kResultOk)
+    return result;
 
   logger = os_log_create("com.thorinf.tram8bridge", "midi");
   os_log(logger, "tram8+ initialized");
@@ -60,7 +63,9 @@ tresult PLUGIN_API Processor::setActive(TBool state) {
   return AudioEffect::setActive(state);
 }
 
-tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement *inputs, int32 numIns, SpeakerArrangement *outputs,
+tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement* inputs,
+                                                 int32 numIns,
+                                                 SpeakerArrangement* outputs,
                                                  int32 numOuts) {
   if (numIns == 0 && numOuts == 1 && outputs[0] == SpeakerArr::kStereo) {
     return AudioEffect::setBusArrangements(inputs, numIns, outputs, numOuts);
@@ -68,19 +73,22 @@ tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement *inputs, int
   return kResultFalse;
 }
 
-tresult PLUGIN_API Processor::process(ProcessData &data) {
+tresult PLUGIN_API Processor::process(ProcessData& data) {
   // Read parameter changes
   if (data.inputParameterChanges) {
     int32 numChanged = data.inputParameterChanges->getParameterCount();
     for (int32 idx = 0; idx < numChanged; idx++) {
-      auto *queue = data.inputParameterChanges->getParameterData(idx);
-      if (!queue) continue;
+      auto* queue = data.inputParameterChanges->getParameterData(idx);
+      if (!queue)
+        continue;
 
       ParamValue value;
       int32 sampleOffset;
       int32 numPoints = queue->getPointCount();
-      if (numPoints <= 0) continue;
-      if (queue->getPoint(numPoints - 1, sampleOffset, value) != kResultTrue) continue;
+      if (numPoints <= 0)
+        continue;
+      if (queue->getPoint(numPoints - 1, sampleOffset, value) != kResultTrue)
+        continue;
 
       ParamID id = queue->getParameterId();
       if (id >= kGateChannelBase && id < kGateChannelBase + TRAM8_NUM_GATES) {
@@ -128,12 +136,14 @@ tresult PLUGIN_API Processor::process(ProcessData &data) {
     }
   }
 
-  if (!data.inputEvents) return kResultOk;
+  if (!data.inputEvents)
+    return kResultOk;
 
   int32 eventCount = data.inputEvents->getEventCount();
   for (int32 i = 0; i < eventCount; i++) {
     Event e;
-    if (data.inputEvents->getEvent(i, e) != kResultOk) continue;
+    if (data.inputEvents->getEvent(i, e) != kResultOk)
+      continue;
 
     if (e.type == Event::kNoteOnEvent) {
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
@@ -142,22 +152,24 @@ tresult PLUGIN_API Processor::process(ProcessData &data) {
         if (chMatch && noteMatch) {
           gateMask |= (1 << g);
           switch (dacMode[g]) {
-          case kDacPitch: {
-            int note = e.noteOn.pitch;
-            if (note < 0) note = 0;
-            if (note > 60) note = 60;
-            dacValues[g] = pitchLookup[note] >> 4;
-            break;
-          }
-          case kDacCC:
-            dacValues[g] = (uint16_t)(ccValues[ccNum[g]] * (TRAM8_DAC_MAX / 127.0f));
-            break;
-          case kDacOff:
-            dacValues[g] = 0;
-            break;
-          default:
-            dacValues[g] = (uint16_t)(e.noteOn.velocity * (float)TRAM8_DAC_MAX);
-            break;
+            case kDacPitch: {
+              int note = e.noteOn.pitch;
+              if (note < 0)
+                note = 0;
+              if (note > 60)
+                note = 60;
+              dacValues[g] = pitchLookup[note] >> 4;
+              break;
+            }
+            case kDacCC:
+              dacValues[g] = (uint16_t)(ccValues[ccNum[g]] * (TRAM8_DAC_MAX / 127.0f));
+              break;
+            case kDacOff:
+              dacValues[g] = 0;
+              break;
+            default:
+              dacValues[g] = (uint16_t)(e.noteOn.velocity * (float)TRAM8_DAC_MAX);
+              break;
           }
           os_log(logger, "gate %d ON  dac=%d mode=%d", g, dacValues[g], dacMode[g]);
         }
@@ -175,13 +187,16 @@ tresult PLUGIN_API Processor::process(ProcessData &data) {
     }
   }
 
-  if (stateChanged()) { sendState(); }
+  if (stateChanged()) {
+    sendState();
+  }
 
   return kResultOk;
 }
 
-tresult PLUGIN_API Processor::notify(IMessage *message) {
-  if (!message) return kInvalidArgument;
+tresult PLUGIN_API Processor::notify(IMessage* message) {
+  if (!message)
+    return kInvalidArgument;
 
   if (strcmp(message->getMessageID(), "SetMIDIPort") == 0) {
     int64 index = -1;
@@ -203,8 +218,9 @@ tresult PLUGIN_API Processor::notify(IMessage *message) {
   return AudioEffect::notify(message);
 }
 
-tresult PLUGIN_API Processor::getState(IBStream *state) {
-  if (!state) return kResultFalse;
+tresult PLUGIN_API Processor::getState(IBStream* state) {
+  if (!state)
+    return kResultFalse;
   for (int i = 0; i < TRAM8_NUM_GATES; i++) {
     int32 ch = filters[i].channel;
     int32 note = filters[i].note;
@@ -220,13 +236,17 @@ tresult PLUGIN_API Processor::getState(IBStream *state) {
   return kResultOk;
 }
 
-tresult PLUGIN_API Processor::setState(IBStream *state) {
-  if (!state) return kResultFalse;
+tresult PLUGIN_API Processor::setState(IBStream* state) {
+  if (!state)
+    return kResultFalse;
   for (int i = 0; i < TRAM8_NUM_GATES; i++) {
     int32 ch = 0, note = 0, mode = 0, dCh = 0, ccN = 0;
-    if (state->read(&ch, sizeof(int32)) != kResultOk) break;
-    if (state->read(&note, sizeof(int32)) != kResultOk) break;
-    if (state->read(&mode, sizeof(int32)) != kResultOk) break;
+    if (state->read(&ch, sizeof(int32)) != kResultOk)
+      break;
+    if (state->read(&note, sizeof(int32)) != kResultOk)
+      break;
+    if (state->read(&mode, sizeof(int32)) != kResultOk)
+      break;
     state->read(&dCh, sizeof(int32));
     state->read(&ccN, sizeof(int32));
     filters[i].channel = (int8_t)ch;
@@ -239,7 +259,8 @@ tresult PLUGIN_API Processor::setState(IBStream *state) {
 }
 
 bool Processor::stateChanged() const {
-  if (gateMask != prevGateMask) return true;
+  if (gateMask != prevGateMask)
+    return true;
   return memcmp(dacValues, prevDacValues, sizeof(dacValues)) != 0;
 }
 
@@ -278,7 +299,9 @@ void Processor::openMidiOutput() {
       os_log(logger, "found MIDI destination [%lu]: %{public}s", i, buf);
       CFRelease(name);
     }
-    if (midiDest == 0) { midiDest = ep; }
+    if (midiDest == 0) {
+      midiDest = ep;
+    }
   }
 
   if (midiDest) {
@@ -289,27 +312,32 @@ void Processor::openMidiOutput() {
 }
 
 void Processor::closeMidiOutput() {
-  if (midiOutPort) MIDIPortDispose(midiOutPort);
-  if (midiClient) MIDIClientDispose(midiClient);
+  if (midiOutPort)
+    MIDIPortDispose(midiOutPort);
+  if (midiClient)
+    MIDIClientDispose(midiClient);
   midiOutPort = 0;
   midiClient = 0;
   midiDest = 0;
 }
 
-void Processor::sendBytes(const uint8_t *data, uint32_t length) {
-  if (!midiOutPort || !midiDest) return;
+void Processor::sendBytes(const uint8_t* data, uint32_t length) {
+  if (!midiOutPort || !midiDest)
+    return;
 
   uint8_t buf[512];
-  MIDIPacketList *packetList = (MIDIPacketList *)buf;
-  MIDIPacket *packet = MIDIPacketListInit(packetList);
+  MIDIPacketList* packetList = (MIDIPacketList*)buf;
+  MIDIPacket* packet = MIDIPacketListInit(packetList);
   packet = MIDIPacketListAdd(packetList, sizeof(buf), packet, 0, length, data);
-  if (packet) { MIDISend(midiOutPort, midiDest, packetList); }
+  if (packet) {
+    MIDISend(midiOutPort, midiDest, packetList);
+  }
 }
 
 #else
 void Processor::openMidiOutput() {}
 void Processor::closeMidiOutput() {}
-void Processor::sendBytes(const uint8_t *, uint32_t) {}
+void Processor::sendBytes(const uint8_t*, uint32_t) {}
 #endif
 
 } // namespace tram8
