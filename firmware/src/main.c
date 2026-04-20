@@ -195,21 +195,24 @@ static void handle_cc(const MidiMsg* msg) {
   }
 }
 
-static void handle_sysex_state(const uint8_t* buf, uint8_t len) {
+static void handle_sysex(const uint8_t* buf, uint8_t len) {
   uint8_t gate_mask;
   uint16_t dac[TRAM8_NUM_GATES];
+  tram8_form_t form;
 
-  if (tram8_parse_state(buf, len, &gate_mask, dac) != 0)
+  if (tram8_parse(buf, len, &gate_mask, dac, &form) != 0)
     return;
 
-  for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++) {
+  for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
     gate_set(i, (gate_mask >> i) & 1);
-    max5825_write(i, dac[i]);
+  if (form != TRAM8_FORM_GATES) {
+    for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
+      max5825_write(i, dac[i]);
   }
 }
 
 static void sysex_mode_loop(void) {
-  uint8_t syx_buf[TRAM8_STATE_MSG_LEN];
+  uint8_t syx_buf[TRAM8_LEN_FULL];
   uint8_t syx_len = 0;
   uint8_t in_sysex = 0;
 
@@ -242,12 +245,8 @@ static void sysex_mode_loop(void) {
         continue;
 
       if (byte == TRAM8_SYSEX_END) {
-        if (syx_len < TRAM8_STATE_MSG_LEN - 1) {
-          in_sysex = 0;
-          continue;
-        }
         syx_buf[syx_len++] = byte;
-        handle_sysex_state(syx_buf, syx_len);
+        handle_sysex(syx_buf, syx_len);
         in_sysex = 0;
         syx_len = 0;
         continue;
@@ -259,7 +258,7 @@ static void sysex_mode_loop(void) {
         continue;
       }
 
-      if (syx_len < TRAM8_STATE_MSG_LEN - 1) {
+      if (syx_len < TRAM8_LEN_FULL - 1) {
         syx_buf[syx_len++] = byte;
       } else {
         in_sysex = 0;

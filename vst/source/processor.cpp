@@ -117,7 +117,7 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         ccValues[cc] = val;
         for (int g = 0; g < TRAM8_NUM_GATES; g++) {
           if (dacMode[g] == kDacCC && ccNum[g] == cc && (gateMask & (1 << g))) {
-            dacValues[g] = (uint16_t)(val * (TRAM8_DAC_MAX / 127.0f));
+            dacValues[g] = (uint16_t)val << 7;
           }
         }
       }
@@ -153,17 +153,17 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
                 note = 0;
               if (note > 60)
                 note = 60;
-              dacValues[g] = pitchLookup[note] >> 4;
+              dacValues[g] = (pitchLookup[note] >> 2) & 0x3FFC;
               break;
             }
             case kDacCC:
-              dacValues[g] = (uint16_t)(ccValues[ccNum[g]] * (TRAM8_DAC_MAX / 127.0f));
+              dacValues[g] = (uint16_t)ccValues[ccNum[g]] << 7;
               break;
             case kDacOff:
               dacValues[g] = 0;
               break;
             default:
-              dacValues[g] = (uint16_t)(e.noteOn.velocity * (float)TRAM8_DAC_MAX);
+              dacValues[g] = (uint16_t)(e.noteOn.velocity * 127.0f) << 7;
               break;
           }
         }
@@ -174,7 +174,8 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         bool noteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
         if (chMatch && noteMatch) {
           gateMask &= ~(1 << g);
-          dacValues[g] = 0;
+          if (dacMode[g] == kDacVelocity)
+            dacValues[g] = 0;
         }
       }
     }
@@ -290,9 +291,26 @@ bool Processor::stateChanged() const {
 }
 
 void Processor::sendState() {
-  uint8_t buf[TRAM8_STATE_MSG_LEN];
-  tram8_pack_state(buf, gateMask, dacValues);
-  if (!sendBytes(buf, TRAM8_STATE_MSG_LEN))
+  bool dacChanged = memcmp(dacValues, prevDacValues, sizeof(dacValues)) != 0;
+
+  tram8_form_t form = TRAM8_FORM_GATES;
+  if (dacChanged) {
+    form = TRAM8_FORM_COARSE;
+    for (int g = 0; g < TRAM8_NUM_GATES; g++) {
+      if (dacMode[g] == kDacPitch) {
+        form = TRAM8_FORM_FULL;
+        break;
+      }
+    }
+  }
+
+  uint16_t dac12[TRAM8_NUM_GATES];
+  for (int i = 0; i < TRAM8_NUM_GATES; i++)
+    dac12[i] = dacValues[i] >> 2;
+
+  uint8_t buf[TRAM8_LEN_FULL];
+  uint8_t len = tram8_pack(buf, gateMask, dac12, form);
+  if (!sendBytes(buf, len))
     return;
 
   prevGateMask = gateMask;
