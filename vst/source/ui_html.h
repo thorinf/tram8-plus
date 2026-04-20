@@ -20,6 +20,17 @@ header {
   padding: 12px 16px 0;
 }
 .title { font-size: 16px; font-weight: bold; color: #fff; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.midi-io { display: flex; gap: 3px; }
+.midi-io-box {
+  width: 16px; height: 16px;
+  border: 1px solid #555; border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: bold;
+  color: #666; background: #1a1a1e;
+  transition: background 0.06s, color 0.06s;
+}
+.midi-io-box.active { background: #999; color: #1a1a1e; }
 hr { border: none; border-top: 1px solid #333; margin: 8px 16px; }
 
 .col-headers {
@@ -134,9 +145,15 @@ hr { border: none; border-top: 1px solid #333; margin: 8px 16px; }
 <div id="wrap">
 <header>
   <span class="title">tram8+</span>
-  <span id="midi-port-cell" class="extra-cell" style="color:#999">
-    <span id="midi-port-label">(none)</span>
-  </span>
+  <div class="header-right">
+    <div class="midi-io">
+      <div id="midi-in" class="midi-io-box">I</div>
+      <div id="midi-out" class="midi-io-box">O</div>
+    </div>
+    <span id="midi-port-cell" class="extra-cell" style="color:#999;cursor:pointer">
+      <span id="midi-port-label">(none)</span>
+    </span>
+  </div>
 </header>
 <hr>
 <div class="col-headers">
@@ -230,6 +247,20 @@ const tram8 = {
       const h = document.getElementById('wrap').offsetHeight;
       this.post({type:'resize', height: h});
     }, 50);
+  },
+
+  flashInput() {
+    const el = document.getElementById('midi-in');
+    el.classList.add('active');
+    clearTimeout(this._inT);
+    this._inT = setTimeout(() => el.classList.remove('active'), 80);
+  },
+
+  flashOutput() {
+    const el = document.getElementById('midi-out');
+    el.classList.add('active');
+    clearTimeout(this._outT);
+    this._outT = setTimeout(() => el.classList.remove('active'), 80);
   },
 
   startEdit(gate, field) {
