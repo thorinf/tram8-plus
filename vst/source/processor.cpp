@@ -285,6 +285,8 @@ void Processor::openMidiOutput() {
   status = MIDIOutputPortCreate(midiClient, CFSTR("tram8+ out"), &midiOutPort);
   if (status != noErr) {
     os_log_error(logger, "failed to create MIDI output port (%d)", (int)status);
+    MIDIClientDispose(midiClient);
+    midiClient = 0;
     return;
   }
 
