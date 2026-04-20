@@ -141,6 +141,7 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
       continue;
 
     if (e.type == Event::kNoteOnEvent) {
+      os_log(logger, "note on: ch=%d note=%d vel=%.3f", e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
         bool chMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOn.channel);
         bool noteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOn.pitch);
@@ -169,6 +170,7 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         }
       }
     } else if (e.type == Event::kNoteOffEvent) {
+      os_log(logger, "note off: ch=%d note=%d", e.noteOff.channel, e.noteOff.pitch);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
         bool chMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOff.channel);
         bool noteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
@@ -310,6 +312,22 @@ void Processor::sendState() {
 
   uint8_t buf[TRAM8_LEN_FULL];
   uint8_t len = tram8_pack(buf, gateMask, dac12, form);
+
+  static const char* formNames[] = {"gates", "coarse", "full"};
+  os_log(logger,
+         "send [%s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
+         formNames[form],
+         len,
+         gateMask,
+         dac12[0],
+         dac12[1],
+         dac12[2],
+         dac12[3],
+         dac12[4],
+         dac12[5],
+         dac12[6],
+         dac12[7]);
+
   if (!sendBytes(buf, len))
     return;
 
