@@ -36,4 +36,4 @@ jobs:
       - name: Build VST3
         run: |
           cmake -B vst/build -S vst -DCMAKE_BUILD_TYPE=Release
-          cmake --build vst/build --config Release
+          cmake --build vst/build --config Release --target tram8-bridge
