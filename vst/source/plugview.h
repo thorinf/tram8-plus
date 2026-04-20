@@ -48,6 +48,8 @@ class PlugView : public Steinberg::IPlugView {
   Steinberg::uint32 PLUGIN_API release() override;
 
   void resizeTo(int width, int height);
+  void flashMidiInput();
+  void flashMidiOutput();
 
  private:
   Steinberg::uint32 refCount = 1;
