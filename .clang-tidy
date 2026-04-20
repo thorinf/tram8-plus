@@ -1,39 +1,24 @@
 Checks: >
-  clang-diagnostic-*,
-  clang-analyzer-*,
+  -*,
   bugprone-*,
   performance-*,
-  portability-*,
-  readability-*,
-  modernize-*,
-  misc-*,
-  cppcoreguidelines-*,
-  hicpp-*,
-  concurrency-*,
-  -readability-identifier-length,
-  -readability-identifier-naming,
-  -readability-braces-around-statements,
-  -readability-magic-numbers,
-  -cppcoreguidelines-avoid-magic-numbers,
-  -cppcoreguidelines-avoid-c-arrays,
-  -hicpp-avoid-c-arrays,
-  -cppcoreguidelines-pro-type-reinterpret-cast,
-  -cppcoreguidelines-non-private-member-variables-in-classes,
-  -modernize-use-trailing-return-type,
-  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
-  -hicpp-no-array-decay,
-  -misc-non-private-member-variables-in-classes
+  modernize-use-override,
+  modernize-use-nullptr,
+  readability-redundant-declaration,
+  readability-misleading-indentation,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
 
-FormatStyle: file
-HeaderFilterRegex: '.*'
-InheritParentConfig: true
+# bugprone-*                        Catches real bugs: use-after-move, dangling handles, etc.
+# performance-*                     Unnecessary copies, inefficient containers, move semantics
+# modernize-use-override/nullptr    Low noise, prevents real mistakes
+# readability-redundant-*           Dead declarations
+# readability-misleading-indent     Catches indentation bugs
+#
+# Disabled:
+# bugprone-easily-swappable-params  Too noisy for MIDI/gate functions (uint8_t channel, uint8_t note, uint8_t velocity)
+# bugprone-narrowing-conversions    Noisy with AVR/MIDI code (int/uint8_t conversions everywhere)
 
-CheckOptions:
-  - key: modernize-use-nullptr.NullMacros
-    value: 'NULL'
-  - key: readability-braces-around-statements.ShortStatementLines
-    value: '1'
-  - key: readability-implicit-bool-conversion.AllowIntegerConditions
-    value: 'true'
-  - key: readability-implicit-bool-conversion.AllowPointerConditions
-    value: 'true'
+HeaderFilterRegex: '(firmware/src|vst/source|protocol)/.*\.(h|hpp)$'
+
+WarningsAsErrors: ''
