@@ -1,3 +1,4 @@
+#include "../../protocol/tram8_sysex.h"
 #include "gpio.h"
 #include "hardware_config.h"
 #include "max5825_control.h"
@@ -183,6 +184,83 @@ static void handle_cc(const MidiMsg *msg) {
   }
 }
 
+static void handle_sysex_state(const uint8_t *buf, uint8_t len) {
+  uint8_t gate_mask;
+  uint16_t dac[TRAM8_NUM_GATES];
+
+  if (tram8_parse_state(buf, len, &gate_mask, dac) != 0) return;
+
+  for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++) {
+    gate_set(i, (gate_mask >> i) & 1);
+    max5825_write(i, dac[i]);
+  }
+}
+
+static void sysex_mode_loop(void) {
+  uint8_t syx_buf[TRAM8_STATE_MSG_LEN];
+  uint8_t syx_len = 0;
+  uint8_t in_sysex = 0;
+
+  for (;;) {
+    uint8_t overflow;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { overflow = rb_overflow; }
+    if (rb_tail == rb_head && overflow) {
+      in_sysex = 0;
+      syx_len = 0;
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { rb_overflow = 0; }
+    }
+
+    uint8_t byte;
+    if (rb_pop(&byte)) {
+      if (byte >= 0xF8) continue; // skip real-time
+
+      if (byte == TRAM8_SYSEX_START) {
+        in_sysex = 1;
+        syx_len = 0;
+        syx_buf[syx_len++] = byte;
+        continue;
+      }
+
+      if (!in_sysex) continue;
+
+      if (byte == TRAM8_SYSEX_END) {
+        if (syx_len < TRAM8_STATE_MSG_LEN - 1) {
+          in_sysex = 0;
+          continue;
+        }
+        syx_buf[syx_len++] = byte;
+        handle_sysex_state(syx_buf, syx_len);
+        in_sysex = 0;
+        syx_len = 0;
+        continue;
+      }
+
+      if (byte >= 0x80) {
+        in_sysex = 0;
+        syx_len = 0;
+        continue;
+      }
+
+      if (syx_len < TRAM8_STATE_MSG_LEN - 1) {
+        syx_buf[syx_len++] = byte;
+      } else {
+        in_sysex = 0;
+        syx_len = 0;
+      }
+    }
+
+    uint8_t ticks;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ticks = timer_ticks;
+      timer_ticks = 0;
+    }
+    if (ticks) {
+      button_update(&learn_button, ticks);
+      if (learn_button.state == BUTTON_HELD) return;
+    }
+  }
+}
+
 static void play_mode_loop(void) {
   MidiParser parser;
   midi_parser_init(&parser);
@@ -251,6 +329,8 @@ static void menu_mode_loop(void) {
         eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
         break;
       case 3:
+        set_mode(MODE_SYSEX);
+        eeprom_update_byte((uint8_t *)EEPROM_MODE_ADDR, module_mode);
         break;
       }
 
@@ -271,6 +351,8 @@ int main(void) {
   uint8_t mode = eeprom_read_byte((uint8_t *)EEPROM_MODE_ADDR);
   if (mode == MODE_CC) {
     set_mode(MODE_CC);
+  } else if (mode == MODE_SYSEX) {
+    set_mode(MODE_SYSEX);
   } else {
     set_mode(MODE_VELOCITY);
   }
@@ -283,7 +365,11 @@ int main(void) {
   sei();
 
   for (;;) {
-    play_mode_loop();
+    if (module_mode == MODE_SYSEX) {
+      sysex_mode_loop();
+    } else {
+      play_mode_loop();
+    }
     menu_mode_loop();
   }
 }

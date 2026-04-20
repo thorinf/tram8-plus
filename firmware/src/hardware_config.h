@@ -52,3 +52,4 @@
 // MIDI modes
 #define MODE_VELOCITY 1
 #define MODE_CC 2
+#define MODE_SYSEX 3
