@@ -25,13 +25,14 @@ class Controller : public Steinberg::Vst::EditController, public Steinberg::Vst:
                                                             Steinberg::Vst::CtrlNumber midiControllerNumber,
                                                             Steinberg::Vst::ParamID& id) override;
 
-  PlugView* activeView = nullptr;
-
   OBJ_METHODS(Controller, EditController)
   DEFINE_INTERFACES
   DEF_INTERFACE(IMidiMapping)
   END_DEFINE_INTERFACES(EditController)
   REFCOUNT_METHODS(EditController)
+
+ private:
+  PlugView* activeView = nullptr;
 };
 
 } // namespace tram8
