@@ -7,6 +7,12 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.11
@@ -20,3 +26,17 @@ repos:
     hooks:
       - id: clang-format
         files: \.(c|h|cpp|hpp|mm)$
+
+  - repo: local
+    hooks:
+      - id: no-hardcoded-paths
+        name: no hardcoded paths
+        language: pygrep
+        entry: '(?i)(/home/(?!runner[/\\])\w+|/Users/(?!runner[/\\])\w+|[A-Z]:[/\\]{1,2}Users[/\\]{1,2}(?!runner[/\\]|Public[/\\])\w+)'
+        types: [text]
+        exclude: '(\.pre-commit-config\.yaml|\.md)$'
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.45.1
+    hooks:
+      - id: typos
