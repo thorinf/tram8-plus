@@ -251,6 +251,24 @@ tresult PLUGIN_API Processor::setState(IBStream* state) {
       dCh = -1;
     if (state->read(&ccN, sizeof(int32)) != kResultOk)
       ccN = 1;
+    if (ch < -1)
+      ch = -1;
+    else if (ch > 15)
+      ch = 15;
+    if (note < -1)
+      note = -1;
+    else if (note > 127)
+      note = 127;
+    if (mode < 0 || mode >= kDacModeCount)
+      mode = kDacVelocity;
+    if (dCh < -1)
+      dCh = -1;
+    else if (dCh > 15)
+      dCh = 15;
+    if (ccN < 0)
+      ccN = 0;
+    else if (ccN > 127)
+      ccN = 127;
     filters[i].channel = (int8_t)ch;
     filters[i].note = (int16_t)note;
     dacMode[i] = (uint8_t)mode;
