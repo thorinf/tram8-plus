@@ -20,6 +20,14 @@ Optional companion plugin that receives MIDI in the DAW and sends packed SysEx t
   <img src="assets/vst-ui.png" alt="tram8+ VST UI" width="560">
 </p>
 
+### Install
+
+Download `tram8-bridge-macos.zip` from the [latest release](../../releases/latest), unzip, and copy `tram8-bridge.vst3` to `~/Library/Audio/Plug-Ins/VST3/`. Then remove the quarantine flag:
+
+```sh
+xattr -cr ~/Library/Audio/Plug-Ins/VST3/tram8-bridge.vst3
+```
+
 ## Building
 
 ### Firmware
