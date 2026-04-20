@@ -200,7 +200,7 @@ static void handle_sysex(const uint8_t* buf, uint8_t len) {
   uint16_t dac[TRAM8_NUM_GATES];
   tram8_form_t form;
 
-  if (tram8_parse_v2(buf, len, &gate_mask, dac, &form) != 0)
+  if (tram8_parse(buf, len, &gate_mask, dac, &form) != 0)
     return;
 
   for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
@@ -212,7 +212,7 @@ static void handle_sysex(const uint8_t* buf, uint8_t len) {
 }
 
 static void sysex_mode_loop(void) {
-  uint8_t syx_buf[TRAM8_V2_LEN_FULL];
+  uint8_t syx_buf[TRAM8_LEN_FULL];
   uint8_t syx_len = 0;
   uint8_t in_sysex = 0;
 
@@ -258,7 +258,7 @@ static void sysex_mode_loop(void) {
         continue;
       }
 
-      if (syx_len < TRAM8_V2_LEN_FULL - 1) {
+      if (syx_len < TRAM8_LEN_FULL - 1) {
         syx_buf[syx_len++] = byte;
       } else {
         in_sysex = 0;

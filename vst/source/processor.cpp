@@ -301,8 +301,8 @@ void Processor::sendState() {
     }
   }
 
-  uint8_t buf[TRAM8_V2_LEN_FULL];
-  uint8_t len = tram8_pack_v2(buf, gateMask, dacValues, form);
+  uint8_t buf[TRAM8_LEN_FULL];
+  uint8_t len = tram8_pack(buf, gateMask, dacValues, form);
   if (!sendBytes(buf, len))
     return;
 
