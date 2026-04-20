@@ -29,7 +29,7 @@ AlignTrailingComments: false
 SortIncludes: false
 
 # Templates and constructors
-AlwaysBreakTemplateDeclarations: Yes
+BreakTemplateDeclarations: Yes
 BreakConstructorInitializers: BeforeColon
 BreakBeforeTernaryOperators: true
 
