@@ -315,7 +315,7 @@ void Processor::sendState() {
 
   static const char* formNames[] = {"gates", "coarse", "full"};
   os_log(logger,
-         "send [%s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
+         "send [%{public}s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
          formNames[form],
          len,
          gateMask,
