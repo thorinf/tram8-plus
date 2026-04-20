@@ -39,13 +39,44 @@ jobs:
           name: firmware
           path: firmware/build/main_firmware.syx
 
+  vst:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S vst -B vst/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build vst/build --config Release
+
+      - name: Sign (ad-hoc)
+        run: codesign --force --deep -s - vst/build/VST3/Release/tram8-bridge.vst3
+
+      - name: Package VST
+        run: |
+          cd vst/build/VST3/Release
+          zip -r tram8-bridge-macos.zip tram8-bridge.vst3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vst
+          path: vst/build/VST3/Release/tram8-bridge-macos.zip
+
   release:
-    needs: [firmware]
+    needs: [firmware, vst]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: firmware
+          path: artifacts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vst
           path: artifacts
 
       - name: Create release
