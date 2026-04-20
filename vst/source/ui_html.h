@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+#pragma once
+
+// clang-format off
+static const char kUIHTML[] = R"html(<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -158,7 +161,7 @@ function nName(n) { return n < 0 ? 'Any' : NT[n%12] + (Math.floor(n/12)-1); }
 function nLabel(n) { return n < 0 ? 'Any' : nName(n) + ' (' + n + ')'; }
 function chLbl(c) { return c < 0 ? 'Any' : '' + (c+1); }
 
-// ─── Popup (for MIDI port only) ────────────────────────────
+// --- Popup (for MIDI port only) ---
 
 function openPopup(anchor, items, active, onSelect) {
   closePopup();
@@ -186,10 +189,10 @@ function openPopup(anchor, items, active, onSelect) {
 }
 function closePopup() { document.getElementById('popup-root').innerHTML = ''; }
 
-// ─── State ─────────────────────────────────────────────────
+// --- State ---
 
 let midiPorts = [];
-let editing = null; // {gate, field} — what cell is being edited
+let editing = null;
 
 const tram8 = {
   gates: Array.from({length: 8}, (_, i) => ({
@@ -338,7 +341,7 @@ const tram8 = {
       const active = field === 'channel' ? g.channel : g.dacChannel;
       const lbl = document.createElement('div');
       lbl.className = 'panel-label';
-      lbl.textContent = field === 'channel' ? 'Gate ' + (editing.gate+1) + ' — Channel' : 'Gate ' + (editing.gate+1) + ' — DAC Channel';
+      lbl.textContent = field === 'channel' ? 'Gate ' + (editing.gate+1) + ' -- Channel' : 'Gate ' + (editing.gate+1) + ' -- DAC Channel';
       panel.appendChild(lbl);
 
       const grid = document.createElement('div');
@@ -358,7 +361,7 @@ const tram8 = {
     if (field === 'note') {
       const lbl = document.createElement('div');
       lbl.className = 'panel-label';
-      lbl.textContent = 'Gate ' + (editing.gate+1) + ' — Note';
+      lbl.textContent = 'Gate ' + (editing.gate+1) + ' -- Note';
       panel.appendChild(lbl);
 
       const grid = document.createElement('div');
@@ -394,7 +397,7 @@ const tram8 = {
     if (field === 'ccNum') {
       const lbl = document.createElement('div');
       lbl.className = 'panel-label';
-      lbl.textContent = 'Gate ' + (editing.gate+1) + ' — CC Number';
+      lbl.textContent = 'Gate ' + (editing.gate+1) + ' -- CC Number';
       panel.appendChild(lbl);
 
       const grid = document.createElement('div');
@@ -429,4 +432,5 @@ const tram8 = {
 document.addEventListener('DOMContentLoaded', () => tram8.init());
 </script>
 </body>
-</html>
+</html>)html";
+// clang-format on

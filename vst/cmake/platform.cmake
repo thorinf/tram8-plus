@@ -10,8 +10,4 @@ if(SMTG_MAC)
     BUNDLE_IDENTIFIER com.thorinf.tram8bridge
     COMPANY_NAME "thorinf"
   )
-  smtg_target_add_plugin_resources(tram8-bridge
-    RESOURCES
-      "${CMAKE_CURRENT_SOURCE_DIR}/resource/ui.html"
-  )
 endif()
