@@ -198,25 +198,16 @@ static void handle_cc(const MidiMsg* msg) {
 static void handle_sysex(const uint8_t* buf, uint8_t len) {
   uint8_t gate_mask;
   uint16_t dac[TRAM8_NUM_GATES];
+  tram8_form_t form;
 
-  if (len >= TRAM8_V2_LEN_GATES && buf[2] == TRAM8_CMD_STATE_V2) {
-    tram8_form_t form;
-    if (tram8_parse_v2(buf, len, &gate_mask, dac, &form) != 0)
-      return;
-    for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
-      gate_set(i, (gate_mask >> i) & 1);
-    if (form != TRAM8_FORM_GATES) {
-      for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
-        max5825_write(i, dac[i]);
-    }
+  if (tram8_parse_v2(buf, len, &gate_mask, dac, &form) != 0)
     return;
-  }
 
-  if (tram8_parse_state(buf, len, &gate_mask, dac) != 0)
-    return;
-  for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++) {
+  for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
     gate_set(i, (gate_mask >> i) & 1);
-    max5825_write(i, dac[i]);
+  if (form != TRAM8_FORM_GATES) {
+    for (uint8_t i = 0; i < TRAM8_NUM_GATES; i++)
+      max5825_write(i, dac[i]);
   }
 }
 
