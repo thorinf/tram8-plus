@@ -240,15 +240,17 @@ tresult PLUGIN_API Processor::setState(IBStream* state) {
   if (!state)
     return kResultFalse;
   for (int i = 0; i < TRAM8_NUM_GATES; i++) {
-    int32 ch = 0, note = 0, mode = 0, dCh = 0, ccN = 0;
+    int32 ch = 0, note = 0, mode = 0, dCh = -1, ccN = 1;
     if (state->read(&ch, sizeof(int32)) != kResultOk)
       break;
     if (state->read(&note, sizeof(int32)) != kResultOk)
       break;
     if (state->read(&mode, sizeof(int32)) != kResultOk)
       break;
-    state->read(&dCh, sizeof(int32));
-    state->read(&ccN, sizeof(int32));
+    if (state->read(&dCh, sizeof(int32)) != kResultOk)
+      dCh = -1;
+    if (state->read(&ccN, sizeof(int32)) != kResultOk)
+      ccN = 1;
     filters[i].channel = (int8_t)ch;
     filters[i].note = (int16_t)note;
     dacMode[i] = (uint8_t)mode;
