@@ -253,14 +253,14 @@ const tram8 = {
     const el = document.getElementById('midi-in');
     el.classList.add('active');
     clearTimeout(this._inT);
-    this._inT = setTimeout(() => el.classList.remove('active'), 80);
+    this._inT = setTimeout(() => el.classList.remove('active'), 150);
   },
 
   flashOutput() {
     const el = document.getElementById('midi-out');
     el.classList.add('active');
     clearTimeout(this._outT);
-    this._outT = setTimeout(() => el.classList.remove('active'), 80);
+    this._outT = setTimeout(() => el.classList.remove('active'), 150);
   },
 
   startEdit(gate, field) {
