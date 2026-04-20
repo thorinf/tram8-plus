@@ -10,8 +10,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(cmake/warnings.cmake)
-
 add_subdirectory(external)
 smtg_enable_vst3_sdk()
 
@@ -32,4 +30,5 @@ target_link_libraries(tram8-bridge
     sdk
 )
 
+include(cmake/warnings.cmake)
 include(cmake/platform.cmake)

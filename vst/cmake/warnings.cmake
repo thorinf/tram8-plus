@@ -1,5 +1,5 @@
 if(MSVC)
-  add_compile_options(/W3)
+  target_compile_options(tram8-bridge PRIVATE /W3)
 else()
-  add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+  target_compile_options(tram8-bridge PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
