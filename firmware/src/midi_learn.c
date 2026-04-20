@@ -19,7 +19,9 @@ void learn_begin(void) {
 }
 
 void learn_exit(void) {
-  if (!g_learn.active) { return; }
+  if (!g_learn.active) {
+    return;
+  }
 
   g_learn.active = 0;
 
@@ -30,7 +32,9 @@ void learn_exit(void) {
 }
 
 uint8_t learn_on_note(uint8_t note) {
-  if (!g_learn.active) { return 0; }
+  if (!g_learn.active) {
+    return 0;
+  }
 
   midi_mapper_set_gate(note, g_learn.gate);
   gate_set(g_learn.gate, 0);
@@ -46,6 +50,10 @@ uint8_t learn_on_note(uint8_t note) {
   return 0;
 }
 
-uint8_t learn_get_current_gate(void) { return g_learn.gate; }
+uint8_t learn_get_current_gate(void) {
+  return g_learn.gate;
+}
 
-uint8_t learn_is_active(void) { return g_learn.active; }
+uint8_t learn_is_active(void) {
+  return g_learn.active;
+}

@@ -10,7 +10,7 @@ typedef struct {
   uint8_t count;
 } MidiMsgVector;
 
-MidiMsgVector process_bytes(const uint8_t *bytes, uint8_t byte_count) {
+MidiMsgVector process_bytes(const uint8_t* bytes, uint8_t byte_count) {
   MidiParser parser;
   MidiMsgVector result = (MidiMsgVector){0};
   MidiMsg msg;
@@ -18,13 +18,15 @@ MidiMsgVector process_bytes(const uint8_t *bytes, uint8_t byte_count) {
   midi_parser_init(&parser);
 
   for (uint8_t i = 0; i < byte_count && result.count < MAX_MESSAGES; i++) {
-    if (midi_parse(&parser, bytes[i], &msg)) { result.messages[result.count++] = msg; }
+    if (midi_parse(&parser, bytes[i], &msg)) {
+      result.messages[result.count++] = msg;
+    }
   }
 
   return result;
 }
 
-static void assert_msg_equals(const MidiMsg *expected, const MidiMsg *actual, const char *test_name) {
+static void assert_msg_equals(const MidiMsg* expected, const MidiMsg* actual, const char* test_name) {
   assert(actual->status == expected->status);
   assert(actual->d1 == expected->d1);
   assert(actual->d2 == expected->d2);

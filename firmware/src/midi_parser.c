@@ -6,9 +6,11 @@ static inline uint8_t data_need(uint8_t s) {
   return (hi == 0xC0 || hi == 0xD0) ? 1 : 2; // Program Change and Pressure Value only 1 data byte, else 2
 }
 
-void midi_parser_init(MidiParser *p) { p->running = p->curr = p->need = p->have = p->d1_tmp = p->desync = 0; }
+void midi_parser_init(MidiParser* p) {
+  p->running = p->curr = p->need = p->have = p->d1_tmp = p->desync = 0;
+}
 
-void midi_parser_force_desync(MidiParser *p) {
+void midi_parser_force_desync(MidiParser* p) {
   p->running = 0;
   p->curr = 0;
   p->need = 0;
@@ -17,7 +19,7 @@ void midi_parser_force_desync(MidiParser *p) {
   p->desync = 1;
 }
 
-uint8_t midi_parse(MidiParser *p, uint8_t b, MidiMsg *out) {
+uint8_t midi_parse(MidiParser* p, uint8_t b, MidiMsg* out) {
   if (b >= 0xF8) {
     // system real-time messages always passes
     // desync doesn't matter as they're length 1
@@ -28,11 +30,12 @@ uint8_t midi_parse(MidiParser *p, uint8_t b, MidiMsg *out) {
   }
 
   if (p->desync) {
-    if (b < 0x80) return 0; // ignore data until status
-    p->desync = 0;          // got status, continue below
+    if (b < 0x80)
+      return 0; // ignore data until status
+    p->desync = 0; // got status, continue below
   }
 
-  if (b & 0x80) {    // status
+  if (b & 0x80) { // status
     if (b >= 0xF0) { // ignore SysEx/System Common
       p->running = p->curr = p->need = p->have = 0;
       return 0;
@@ -44,7 +47,8 @@ uint8_t midi_parse(MidiParser *p, uint8_t b, MidiMsg *out) {
   }
   // data
   if (p->curr == 0) {
-    if (!p->running) return 0; // stray data
+    if (!p->running)
+      return 0; // stray data
     p->curr = p->running;
     p->need = data_need(p->curr);
     p->have = 0;

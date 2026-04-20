@@ -15,6 +15,6 @@ typedef struct {
   uint8_t desync;
 } MidiParser;
 
-void midi_parser_init(MidiParser *p);
-uint8_t midi_parse(MidiParser *p, uint8_t byte, MidiMsg *out);
-void midi_parser_force_desync(MidiParser *p);
+void midi_parser_init(MidiParser* p);
+uint8_t midi_parse(MidiParser* p, uint8_t byte, MidiMsg* out);
+void midi_parser_force_desync(MidiParser* p);
