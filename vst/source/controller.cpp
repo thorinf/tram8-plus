@@ -103,15 +103,17 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
     return kResultFalse;
 
   for (int i = 0; i < 8; i++) {
-    int32 chVal = 0, noteVal = 0, modeVal = 0, dacChVal = 0, ccNumVal = 0;
+    int32 chVal = 0, noteVal = 0, modeVal = 0, dacChVal = -1, ccNumVal = 1;
     if (state->read(&chVal, sizeof(int32)) != kResultOk)
       break;
     if (state->read(&noteVal, sizeof(int32)) != kResultOk)
       break;
     if (state->read(&modeVal, sizeof(int32)) != kResultOk)
       break;
-    state->read(&dacChVal, sizeof(int32));
-    state->read(&ccNumVal, sizeof(int32));
+    if (state->read(&dacChVal, sizeof(int32)) != kResultOk)
+      dacChVal = -1;
+    if (state->read(&ccNumVal, sizeof(int32)) != kResultOk)
+      ccNumVal = 1;
 
     int chStep = chVal + 1;
     if (chStep < 0)
