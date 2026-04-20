@@ -302,15 +302,16 @@ tresult PLUGIN_API PlugView::queryInterface(const TUID iid, void** obj) {
 }
 
 uint32 PLUGIN_API PlugView::addRef() {
-  return ++refCount;
+  return refCount.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
 uint32 PLUGIN_API PlugView::release() {
-  if (--refCount == 0) {
+  uint32 prev = refCount.fetch_sub(1, std::memory_order_acq_rel);
+  if (prev == 1) {
     delete this;
     return 0;
   }
-  return refCount;
+  return prev - 1;
 }
 
 } // namespace tram8
