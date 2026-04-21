@@ -9,19 +9,19 @@ static void test_note_stack_push_pop() {
   NoteStack stack;
   assert(stack.empty());
 
-  stack.push(60, 100);
+  stack.push(0, 60, 100);
   assert(!stack.empty());
   assert(stack.top().note == 60);
   assert(stack.top().velocity == 100);
 
-  stack.push(64, 80);
+  stack.push(0, 64, 80);
   assert(stack.top().note == 64);
   assert(stack.top().velocity == 80);
 
-  stack.remove(64);
+  stack.remove(0, 64);
   assert(stack.top().note == 60);
 
-  stack.remove(60);
+  stack.remove(0, 60);
   assert(stack.empty());
 
   printf("note_stack_push_pop passed\n");
@@ -29,9 +29,9 @@ static void test_note_stack_push_pop() {
 
 static void test_note_stack_retrigger() {
   NoteStack stack;
-  stack.push(60, 100);
-  stack.push(64, 80);
-  stack.push(60, 90);
+  stack.push(0, 60, 100);
+  stack.push(0, 64, 80);
+  stack.push(0, 60, 90);
 
   assert(stack.top().note == 60);
   assert(stack.top().velocity == 90);
@@ -43,12 +43,26 @@ static void test_note_stack_retrigger() {
 static void test_note_stack_overflow() {
   NoteStack stack;
   for (int i = 0; i < NoteStack::kMaxNotes + 4; i++)
-    stack.push(i, 64);
+    stack.push(0, i, 64);
 
   assert(stack.count == NoteStack::kMaxNotes);
   assert(stack.top().note == NoteStack::kMaxNotes - 1);
 
   printf("note_stack_overflow passed\n");
+}
+
+static void test_note_stack_channel_isolation() {
+  NoteStack stack;
+  stack.push(0, 60, 100);
+  stack.push(1, 60, 80);
+  assert(stack.count == 2);
+
+  stack.remove(0, 60);
+  assert(stack.count == 1);
+  assert(stack.top().channel == 1);
+  assert(stack.top().note == 60);
+
+  printf("note_stack_channel_isolation passed\n");
 }
 
 static void test_velocity_mode() {
@@ -539,10 +553,100 @@ static void test_config_sequence_full_workflow() {
   printf("config_sequence_full_workflow passed\n");
 }
 
+static void test_gate_held_with_overlapping_notes() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOn(0, 62, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 60);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 62);
+  assert(!(engine.gateMask() & 1));
+
+  printf("gate_held_with_overlapping_notes passed\n");
+}
+
+static void test_gate_held_release_in_any_order() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  engine.noteOn(0, 64, 0.8f);
+  engine.noteOn(0, 67, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 64);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 67);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 60);
+  assert(!(engine.gateMask() & 1));
+
+  printf("gate_held_release_in_any_order passed\n");
+}
+
+static void test_gate_specific_note_overlapping() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, 60);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOn(0, 60, 0.9f);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 60);
+  assert(!(engine.gateMask() & 1));
+
+  printf("gate_specific_note_overlapping passed\n");
+}
+
+static void test_cross_channel_note_independence() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacPitch);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 48, 0.8f);
+  uint16_t pitch48 = engine.dacValues()[0];
+  assert(engine.gateMask() & 1);
+
+  engine.noteOn(1, 48, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.noteOff(0, 48);
+  assert(engine.gateMask() & 1);
+  assert(engine.dacValues()[0] == pitch48);
+
+  engine.noteOff(1, 48);
+  assert(!(engine.gateMask() & 1));
+
+  printf("cross_channel_note_independence passed\n");
+}
+
 int main() {
   test_note_stack_push_pop();
   test_note_stack_retrigger();
   test_note_stack_overflow();
+  test_note_stack_channel_isolation();
   test_velocity_mode();
   test_velocity_zero_as_note_off();
   test_pitch_mode();
@@ -567,6 +671,10 @@ int main() {
   test_config_change_cc_num();
   test_config_change_dac_channel();
   test_config_sequence_full_workflow();
+  test_gate_held_with_overlapping_notes();
+  test_gate_held_release_in_any_order();
+  test_gate_specific_note_overlapping();
+  test_cross_channel_note_independence();
   printf("\nAll tests passed!\n");
   return 0;
 }
