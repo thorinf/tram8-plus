@@ -642,6 +642,52 @@ static void test_cross_channel_note_independence() {
   printf("cross_channel_note_independence passed\n");
 }
 
+static void test_cc_dac_independent_of_gate() {
+  MidiEngine engine;
+  engine.setGateChannel(0, 0);
+  engine.setGateNote(0, 60);
+  engine.setDacMode(0, kDacCC);
+  engine.setDacChannel(0, 1);
+  engine.setCcNum(0, 7);
+
+  engine.noteOn(1, 64, 0.8f);
+  assert(!(engine.gateMask() & 1));
+
+  engine.setCcValue(7, 64);
+  assert(engine.dacValues()[0] == (uint16_t)64 << 7);
+
+  engine.setCcValue(7, 0);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("cc_dac_independent_of_gate passed\n");
+}
+
+static void test_velocity_cross_channel_fallback() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.25f);
+  uint16_t ch0Vel = (uint16_t)(0.25f * 127.0f) << 7;
+  assert(engine.dacValues()[0] == ch0Vel);
+
+  engine.noteOn(1, 60, 0.75f);
+  uint16_t ch1Vel = (uint16_t)(0.75f * 127.0f) << 7;
+  assert(engine.dacValues()[0] == ch1Vel);
+
+  engine.noteOff(1, 60);
+  assert(engine.gateMask() & 1);
+  assert(engine.dacValues()[0] == ch0Vel);
+
+  engine.noteOff(0, 60);
+  assert(!(engine.gateMask() & 1));
+  assert(engine.dacValues()[0] == 0);
+
+  printf("velocity_cross_channel_fallback passed\n");
+}
+
 int main() {
   test_note_stack_push_pop();
   test_note_stack_retrigger();
@@ -675,6 +721,8 @@ int main() {
   test_gate_held_release_in_any_order();
   test_gate_specific_note_overlapping();
   test_cross_channel_note_independence();
+  test_cc_dac_independent_of_gate();
+  test_velocity_cross_channel_fallback();
   printf("\nAll tests passed!\n");
   return 0;
 }

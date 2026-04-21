@@ -64,7 +64,7 @@ class MidiEngine {
   void setCcValue(uint8_t cc, uint8_t value) {
     ccValues_[cc] = value;
     for (int g = 0; g < kNumGates; g++) {
-      if (dacMode_[g] == kDacCC && ccNum_[g] == cc && (gateMask_ & (1 << g)))
+      if (dacMode_[g] == kDacCC && ccNum_[g] == cc && !noteStacks_[g].empty())
         dacValues_[g] = (uint16_t)value << 7;
     }
   }
