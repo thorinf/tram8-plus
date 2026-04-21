@@ -76,7 +76,7 @@ class MidiEngine {
     noteStacks_[gate].count = 0;
     if (mode == kDacCC)
       dacValues_[gate] = (uint16_t)ccValues_[ccNum_[gate]] << 7;
-    else if (mode == kDacOff || mode == kDacVelocity)
+    else
       dacValues_[gate] = 0;
   }
 
@@ -90,14 +90,14 @@ class MidiEngine {
 
   void setCcNum(int gate, uint8_t cc) {
     ccNum_[gate] = cc;
-    if (dacMode_[gate] == kDacCC && !noteStacks_[gate].empty())
+    if (dacMode_[gate] == kDacCC)
       dacValues_[gate] = (uint16_t)ccValues_[cc] << 7;
   }
 
   void setCcValue(uint8_t cc, uint8_t value) {
     ccValues_[cc] = value;
     for (int g = 0; g < kNumGates; g++) {
-      if (dacMode_[g] == kDacCC && ccNum_[g] == cc && !noteStacks_[g].empty())
+      if (dacMode_[g] == kDacCC && ccNum_[g] == cc)
         dacValues_[g] = (uint16_t)value << 7;
     }
   }

@@ -791,6 +791,41 @@ static void test_cc_dac_independent_of_gate() {
   printf("cc_dac_independent_of_gate passed\n");
 }
 
+static void test_cc_updates_without_active_note() {
+  MidiEngine engine;
+  engine.setDacMode(0, kDacCC);
+  engine.setDacChannel(0, -1);
+  engine.setCcNum(0, 7);
+
+  engine.setCcValue(7, 64);
+  assert(engine.dacValues()[0] == (uint16_t)64 << 7);
+
+  engine.setCcValue(7, 100);
+  assert(engine.dacValues()[0] == (uint16_t)100 << 7);
+
+  engine.setCcNum(0, 1);
+  engine.setCcValue(1, 50);
+  assert(engine.dacValues()[0] == (uint16_t)50 << 7);
+
+  printf("cc_updates_without_active_note passed\n");
+}
+
+static void test_dac_mode_to_pitch_zeros_value() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 1.0f);
+  assert(engine.dacValues()[0] > 0);
+
+  engine.setDacMode(0, kDacPitch);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("dac_mode_to_pitch_zeros_value passed\n");
+}
+
 int main() {
   test_note_stack_push_pop();
   test_note_stack_retrigger();
@@ -832,6 +867,8 @@ int main() {
   test_dac_mode_pitch_to_cc_populates_value();
   test_dac_channel_change_zeros_pitch();
   test_cc_dac_independent_of_gate();
+  test_cc_updates_without_active_note();
+  test_dac_mode_to_pitch_zeros_value();
   printf("\nAll tests passed!\n");
   return 0;
 }
