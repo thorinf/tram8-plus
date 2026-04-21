@@ -50,6 +50,8 @@ add_custom_target(generate_ui_html DEPENDS "${UI_HTML_OUTPUT}")
 smtg_add_vst3plugin(tram8-bridge
   source/cids.h
   source/version.h
+  source/midi_engine.h
+  source/midi_engine.cpp
   source/processor.h
   source/processor.cpp
   source/controller.h

@@ -1,5 +1,6 @@
 #include "processor.h"
 #include "cids.h"
+#include "../../protocol/tram8_sysex.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
@@ -10,16 +11,6 @@ using namespace Steinberg;
 using namespace Steinberg::Vst;
 
 namespace tram8 {
-
-// 1V/oct pitch lookup: MIDI notes 0-60 (C-2 to C3), 12-bit DAC, 5V range
-// Values are left-justified in 16-bit (actual DAC value = entry >> 4)
-const uint16_t Processor::pitchLookup[61] = {
-    0x0000, 0x0440, 0x0880, 0x0CD0, 0x1110, 0x1550, 0x19A0, 0x1DE0, 0x2220, 0x2660, 0x2AA0, 0x2EF0, 0x3330,
-    0x3770, 0x3BC0, 0x4000, 0x4440, 0x4880, 0x4CC0, 0x5110, 0x5550, 0x5990, 0x5DE0, 0x6220, 0x6660, 0x6AA0,
-    0x6EE0, 0x7330, 0x7770, 0x7BB0, 0x8000, 0x8440, 0x8880, 0x8CC0, 0x9100, 0x9550, 0x9990, 0x9DD0, 0xA220,
-    0xA660, 0xAAA0, 0xAEE0, 0xB320, 0xB770, 0xBBB0, 0xBFF0, 0xC440, 0xC880, 0xCCC0, 0xD100, 0xD550, 0xD990,
-    0xDDD0, 0xE210, 0xE660, 0xEAA0, 0xEEE0, 0xF320, 0xF760, 0xFBB0, 0xFFF0,
-};
 
 Processor::Processor() {
   setControllerClass(kControllerUID);
@@ -38,13 +29,7 @@ tresult PLUGIN_API Processor::initialize(FUnknown* context) {
   addEventInput(STR16("MIDI In"), 1);
   addAudioOutput(STR16("Audio Out"), SpeakerArr::kStereo);
 
-  for (int i = 0; i < TRAM8_NUM_GATES; i++) {
-    filters[i].channel = -1;
-    filters[i].note = 60 + i;
-    dacChannel[i] = -1;
-    ccNum[i] = 1;
-  }
-
+  engine_.reset();
   openMidiOutput();
   return kResultOk;
 }
@@ -56,10 +41,7 @@ tresult PLUGIN_API Processor::terminate() {
 
 tresult PLUGIN_API Processor::setActive(TBool state) {
   if (!state) {
-    gateMask = 0;
-    memset(dacValues, 0, sizeof(dacValues));
-    for (int i = 0; i < TRAM8_NUM_GATES; i++)
-      noteStacks[i].count = 0;
+    engine_.clearRuntime();
     sendState();
   }
   return AudioEffect::setActive(state);
@@ -76,7 +58,6 @@ tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement* inputs,
 }
 
 tresult PLUGIN_API Processor::process(ProcessData& data) {
-  // Read parameter changes
   if (data.inputParameterChanges) {
     int32 numChanged = data.inputParameterChanges->getParameterCount();
     for (int32 idx = 0; idx < numChanged; idx++) {
@@ -93,40 +74,33 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         continue;
 
       ParamID id = queue->getParameterId();
-      if (id >= kGateChannelBase && id < kGateChannelBase + TRAM8_NUM_GATES) {
+      if (id >= kGateChannelBase && id < kGateChannelBase + kNumGates) {
         int gate = id - kGateChannelBase;
         int step = (int)(value * 16 + 0.5);
-        filters[gate].channel = (step == 0) ? -1 : (int8_t)(step - 1);
-      } else if (id >= kGateNoteBase && id < kGateNoteBase + TRAM8_NUM_GATES) {
+        engine_.setGateChannel(gate, (step == 0) ? -1 : (int8_t)(step - 1));
+      } else if (id >= kGateNoteBase && id < kGateNoteBase + kNumGates) {
         int gate = id - kGateNoteBase;
         int step = (int)(value * 128 + 0.5);
-        filters[gate].note = (step == 0) ? -1 : (int16_t)(step - 1);
-      } else if (id >= kDacModeBase && id < kDacModeBase + TRAM8_NUM_GATES) {
+        engine_.setGateNote(gate, (step == 0) ? -1 : (int16_t)(step - 1));
+      } else if (id >= kDacModeBase && id < kDacModeBase + kNumGates) {
         int gate = id - kDacModeBase;
         int step = (int)(value * (kDacModeCount - 1) + 0.5);
-        dacMode[gate] = (uint8_t)step;
-      } else if (id >= kDacChannelBase && id < kDacChannelBase + TRAM8_NUM_GATES) {
+        engine_.setDacMode(gate, (uint8_t)step);
+      } else if (id >= kDacChannelBase && id < kDacChannelBase + kNumGates) {
         int gate = id - kDacChannelBase;
         int step = (int)(value * 16 + 0.5);
-        dacChannel[gate] = (step == 0) ? -1 : (int8_t)(step - 1);
-      } else if (id >= kCcNumBase && id < kCcNumBase + TRAM8_NUM_GATES) {
+        engine_.setDacChannel(gate, (step == 0) ? -1 : (int8_t)(step - 1));
+      } else if (id >= kCcNumBase && id < kCcNumBase + kNumGates) {
         int gate = id - kCcNumBase;
         int step = (int)(value * 127 + 0.5);
-        ccNum[gate] = (uint8_t)step;
+        engine_.setCcNum(gate, (uint8_t)step);
       } else if (id >= kCcValueBase && id < kCcValueBase + 128) {
         int cc = id - kCcValueBase;
-        uint8_t val = (uint8_t)(value * 127 + 0.5);
-        ccValues[cc] = val;
-        for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-          if (dacMode[g] == kDacCC && ccNum[g] == cc && (gateMask & (1 << g))) {
-            dacValues[g] = (uint16_t)val << 7;
-          }
-        }
+        engine_.setCcValue((uint8_t)cc, (uint8_t)(value * 127 + 0.5));
       }
     }
   }
 
-  // Silence output
   if (data.numOutputs > 0) {
     for (int32 ch = 0; ch < data.outputs[0].numChannels; ch++) {
       memset(data.outputs[0].channelBuffers32[ch], 0, sizeof(float) * data.numSamples);
@@ -142,52 +116,16 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     if (data.inputEvents->getEvent(i, e) != kResultOk)
       continue;
 
-    if (e.type == Event::kNoteOnEvent && e.noteOn.velocity == 0.f) {
-      e.type = Event::kNoteOffEvent;
-      e.noteOff.channel = e.noteOn.channel;
-      e.noteOff.pitch = e.noteOn.pitch;
-      e.noteOff.velocity = 0.f;
-      e.noteOff.noteId = e.noteOn.noteId;
-      e.noteOff.tuning = 0.f;
-    }
-
     if (e.type == Event::kNoteOnEvent) {
       os_log(logger, "note on: ch=%d note=%d vel=%.3f", e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
-      uint8_t vel = (uint8_t)(e.noteOn.velocity * 127.0f);
-      for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-        bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOn.channel);
-        bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOn.pitch);
-        if (gateChMatch && gateNoteMatch)
-          gateMask |= (1 << g);
-
-        bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOn.channel);
-        if (dacChMatch) {
-          noteStacks[g].push(e.noteOn.pitch, vel);
-          updateDac(g, e.noteOn.pitch, vel);
-        }
-      }
+      engine_.noteOn(e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
     } else if (e.type == Event::kNoteOffEvent) {
       os_log(logger, "note off: ch=%d note=%d", e.noteOff.channel, e.noteOff.pitch);
-      for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-        bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOff.channel);
-        bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
-        if (gateChMatch && gateNoteMatch)
-          gateMask &= ~(1 << g);
-
-        bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOff.channel);
-        if (dacChMatch) {
-          noteStacks[g].remove(e.noteOff.pitch);
-          if (!noteStacks[g].empty()) {
-            updateDac(g, noteStacks[g].top().note, noteStacks[g].top().velocity);
-          } else if (dacMode[g] == kDacVelocity) {
-            dacValues[g] = 0;
-          }
-        }
-      }
+      engine_.noteOff(e.noteOff.channel, e.noteOff.pitch);
     }
   }
 
-  bool hadOutput = stateChanged();
+  bool hadOutput = engine_.stateChanged();
   if (hadOutput)
     sendState();
 
@@ -233,118 +171,66 @@ tresult PLUGIN_API Processor::notify(IMessage* message) {
 tresult PLUGIN_API Processor::getState(IBStream* state) {
   if (!state)
     return kResultFalse;
-  for (int i = 0; i < TRAM8_NUM_GATES; i++) {
-    int32 ch = filters[i].channel;
-    int32 note = filters[i].note;
-    int32 mode = dacMode[i];
-    int32 dCh = dacChannel[i];
-    int32 ccN = ccNum[i];
-    state->write(&ch, sizeof(int32));
-    state->write(&note, sizeof(int32));
-    state->write(&mode, sizeof(int32));
-    state->write(&dCh, sizeof(int32));
-    state->write(&ccN, sizeof(int32));
-  }
-  return kResultOk;
+  int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
+  engine_.serialize(buf);
+  return state->write(buf, sizeof(buf)) == kResultOk ? kResultOk : kResultFalse;
 }
 
 tresult PLUGIN_API Processor::setState(IBStream* state) {
   if (!state)
     return kResultFalse;
-  for (int i = 0; i < TRAM8_NUM_GATES; i++) {
-    int32 ch = 0, note = 0, mode = 0, dCh = -1, ccN = 1;
-    if (state->read(&ch, sizeof(int32)) != kResultOk)
+  int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
+  engine_.serialize(buf);
+
+  for (int i = 0; i < kNumGates; i++) {
+    int32_t ch, note, mode;
+    int32_t dCh = -1, ccN = 1;
+    if (state->read(&ch, sizeof(ch)) != kResultOk)
       break;
-    if (state->read(&note, sizeof(int32)) != kResultOk)
+    if (state->read(&note, sizeof(note)) != kResultOk)
       break;
-    if (state->read(&mode, sizeof(int32)) != kResultOk)
+    if (state->read(&mode, sizeof(mode)) != kResultOk)
       break;
-    if (state->read(&dCh, sizeof(int32)) != kResultOk)
+    if (state->read(&dCh, sizeof(dCh)) != kResultOk) {
       dCh = -1;
-    if (state->read(&ccN, sizeof(int32)) != kResultOk)
       ccN = 1;
-    if (ch < -1)
-      ch = -1;
-    else if (ch > 15)
-      ch = 15;
-    if (note < -1)
-      note = -1;
-    else if (note > 127)
-      note = 127;
-    if (mode < 0 || mode >= kDacModeCount)
-      mode = kDacVelocity;
-    if (dCh < -1)
-      dCh = -1;
-    else if (dCh > 15)
-      dCh = 15;
-    if (ccN < 0)
-      ccN = 0;
-    else if (ccN > 127)
-      ccN = 127;
-    filters[i].channel = (int8_t)ch;
-    filters[i].note = (int16_t)note;
-    dacMode[i] = (uint8_t)mode;
-    dacChannel[i] = (int8_t)dCh;
-    ccNum[i] = (uint8_t)ccN;
+    } else if (state->read(&ccN, sizeof(ccN)) != kResultOk) {
+      ccN = 1;
+    }
+
+    int off = i * MidiEngine::kStateWordsPerGate;
+    buf[off + 0] = ch;
+    buf[off + 1] = note;
+    buf[off + 2] = mode;
+    buf[off + 3] = dCh;
+    buf[off + 4] = ccN;
   }
+
+  engine_.deserialize(buf);
   return kResultOk;
 }
 
-void Processor::updateDac(int g, int16_t note, uint8_t velocity) {
-  switch (dacMode[g]) {
-    case kDacPitch: {
-      int n = note;
-      if (n < 0)
-        n = 0;
-      if (n > 60)
-        n = 60;
-      dacValues[g] = (pitchLookup[n] >> 2) & 0x3FFC;
-      break;
-    }
-    case kDacCC:
-      dacValues[g] = (uint16_t)ccValues[ccNum[g]] << 7;
-      break;
-    case kDacOff:
-      break;
-    default:
-      dacValues[g] = (uint16_t)velocity << 7;
-      break;
-  }
-}
-
-bool Processor::stateChanged() const {
-  if (gateMask != prevGateMask)
-    return true;
-  return memcmp(dacValues, prevDacValues, sizeof(dacValues)) != 0;
-}
-
 void Processor::sendState() {
-  bool dacChanged = memcmp(dacValues, prevDacValues, sizeof(dacValues)) != 0;
-
   tram8_form_t form = TRAM8_FORM_GATES;
-  if (dacChanged) {
+  if (engine_.dacChanged() && engine_.hasPitchMode()) {
+    form = TRAM8_FORM_FULL;
+  } else if (engine_.dacChanged()) {
     form = TRAM8_FORM_COARSE;
-    for (int g = 0; g < TRAM8_NUM_GATES; g++) {
-      if (dacMode[g] == kDacPitch) {
-        form = TRAM8_FORM_FULL;
-        break;
-      }
-    }
   }
 
-  uint16_t dac12[TRAM8_NUM_GATES];
-  for (int i = 0; i < TRAM8_NUM_GATES; i++)
-    dac12[i] = dacValues[i] >> 2;
+  uint16_t dac12[kNumGates];
+  for (int i = 0; i < kNumGates; i++)
+    dac12[i] = engine_.dacValues()[i] >> 2;
 
   uint8_t buf[TRAM8_LEN_FULL];
-  uint8_t len = tram8_pack(buf, gateMask, dac12, form);
+  uint8_t len = tram8_pack(buf, engine_.gateMask(), dac12, form);
 
   static const char* formNames[] = {"gates", "coarse", "full"};
   os_log(logger,
          "send [%{public}s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
          formNames[form],
          len,
-         gateMask,
+         engine_.gateMask(),
          dac12[0],
          dac12[1],
          dac12[2],
@@ -357,8 +243,7 @@ void Processor::sendState() {
   if (!sendBytes(buf, len))
     return;
 
-  prevGateMask = gateMask;
-  memcpy(prevDacValues, dacValues, sizeof(dacValues));
+  engine_.markSent();
 }
 
 #ifdef __APPLE__
