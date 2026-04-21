@@ -58,6 +58,8 @@ tresult PLUGIN_API Processor::setActive(TBool state) {
   if (!state) {
     gateMask = 0;
     memset(dacValues, 0, sizeof(dacValues));
+    for (int i = 0; i < TRAM8_NUM_GATES; i++)
+      noteStacks[i].count = 0;
     sendState();
   }
   return AudioEffect::setActive(state);
@@ -140,8 +142,18 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     if (data.inputEvents->getEvent(i, e) != kResultOk)
       continue;
 
+    if (e.type == Event::kNoteOnEvent && e.noteOn.velocity == 0.f) {
+      e.type = Event::kNoteOffEvent;
+      e.noteOff.channel = e.noteOn.channel;
+      e.noteOff.pitch = e.noteOn.pitch;
+      e.noteOff.velocity = 0.f;
+      e.noteOff.noteId = e.noteOn.noteId;
+      e.noteOff.tuning = 0.f;
+    }
+
     if (e.type == Event::kNoteOnEvent) {
       os_log(logger, "note on: ch=%d note=%d vel=%.3f", e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
+      uint8_t vel = (uint8_t)(e.noteOn.velocity * 127.0f);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
         bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOn.channel);
         bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOn.pitch);
@@ -150,26 +162,8 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
 
         bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOn.channel);
         if (dacChMatch) {
-          switch (dacMode[g]) {
-            case kDacPitch: {
-              int note = e.noteOn.pitch;
-              if (note < 0)
-                note = 0;
-              if (note > 60)
-                note = 60;
-              dacValues[g] = (pitchLookup[note] >> 2) & 0x3FFC;
-              break;
-            }
-            case kDacCC:
-              dacValues[g] = (uint16_t)ccValues[ccNum[g]] << 7;
-              break;
-            case kDacOff:
-              dacValues[g] = 0;
-              break;
-            default:
-              dacValues[g] = (uint16_t)(e.noteOn.velocity * 127.0f) << 7;
-              break;
-          }
+          noteStacks[g].push(e.noteOn.pitch, vel);
+          updateDac(g, e.noteOn.pitch, vel);
         }
       }
     } else if (e.type == Event::kNoteOffEvent) {
@@ -181,8 +175,14 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
           gateMask &= ~(1 << g);
 
         bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOff.channel);
-        if (dacChMatch && dacMode[g] == kDacVelocity)
-          dacValues[g] = 0;
+        if (dacChMatch) {
+          noteStacks[g].remove(e.noteOff.pitch);
+          if (!noteStacks[g].empty()) {
+            updateDac(g, noteStacks[g].top().note, noteStacks[g].top().velocity);
+          } else if (dacMode[g] == kDacVelocity) {
+            dacValues[g] = 0;
+          }
+        }
       }
     }
   }
@@ -288,6 +288,28 @@ tresult PLUGIN_API Processor::setState(IBStream* state) {
     ccNum[i] = (uint8_t)ccN;
   }
   return kResultOk;
+}
+
+void Processor::updateDac(int g, int16_t note, uint8_t velocity) {
+  switch (dacMode[g]) {
+    case kDacPitch: {
+      int n = note;
+      if (n < 0)
+        n = 0;
+      if (n > 60)
+        n = 60;
+      dacValues[g] = (pitchLookup[n] >> 2) & 0x3FFC;
+      break;
+    }
+    case kDacCC:
+      dacValues[g] = (uint16_t)ccValues[ccNum[g]] << 7;
+      break;
+    case kDacOff:
+      break;
+    default:
+      dacValues[g] = (uint16_t)velocity << 7;
+      break;
+  }
 }
 
 bool Processor::stateChanged() const {
