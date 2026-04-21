@@ -142,42 +142,47 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     if (data.inputEvents->getEvent(i, e) != kResultOk)
       continue;
 
+    if (e.type == Event::kNoteOnEvent && e.noteOn.velocity == 0.f) {
+      e.type = Event::kNoteOffEvent;
+      e.noteOff.channel = e.noteOn.channel;
+      e.noteOff.pitch = e.noteOn.pitch;
+      e.noteOff.velocity = 0.f;
+      e.noteOff.noteId = e.noteOn.noteId;
+      e.noteOff.tuning = 0.f;
+    }
+
     if (e.type == Event::kNoteOnEvent) {
       os_log(logger, "note on: ch=%d note=%d vel=%.3f", e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
       uint8_t vel = (uint8_t)(e.noteOn.velocity * 127.0f);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
         bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOn.channel);
         bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOn.pitch);
-        if (gateChMatch && gateNoteMatch) {
-          if (filters[g].note == -1)
-            noteStacks[g].push(e.noteOn.pitch, vel);
+        if (gateChMatch && gateNoteMatch)
           gateMask |= (1 << g);
-        }
 
         bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOn.channel);
-        if (dacChMatch)
+        if (dacChMatch) {
+          noteStacks[g].push(e.noteOn.pitch, vel);
           updateDac(g, e.noteOn.pitch, vel);
+        }
       }
     } else if (e.type == Event::kNoteOffEvent) {
       os_log(logger, "note off: ch=%d note=%d", e.noteOff.channel, e.noteOff.pitch);
       for (int g = 0; g < TRAM8_NUM_GATES; g++) {
         bool gateChMatch = (filters[g].channel == -1) || (filters[g].channel == e.noteOff.channel);
         bool gateNoteMatch = (filters[g].note == -1) || (filters[g].note == e.noteOff.pitch);
-        if (gateChMatch && gateNoteMatch) {
-          if (filters[g].note == -1) {
-            noteStacks[g].remove(e.noteOff.pitch);
-            if (!noteStacks[g].empty()) {
-              const auto& prev = noteStacks[g].top();
-              updateDac(g, prev.note, prev.velocity);
-              continue;
-            }
-          }
+        if (gateChMatch && gateNoteMatch)
           gateMask &= ~(1 << g);
-        }
 
         bool dacChMatch = (dacChannel[g] == -1) || (dacChannel[g] == e.noteOff.channel);
-        if (dacChMatch && dacMode[g] == kDacVelocity)
-          dacValues[g] = 0;
+        if (dacChMatch) {
+          noteStacks[g].remove(e.noteOff.pitch);
+          if (!noteStacks[g].empty()) {
+            updateDac(g, noteStacks[g].top().note, noteStacks[g].top().velocity);
+          } else if (dacMode[g] == kDacVelocity) {
+            dacValues[g] = 0;
+          }
+        }
       }
     }
   }
