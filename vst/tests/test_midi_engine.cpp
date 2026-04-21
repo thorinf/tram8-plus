@@ -77,7 +77,7 @@ static void test_velocity_mode() {
   assert(engine.dacValues()[0] == 127 << 7);
 
   engine.noteOn(0, 60, 0.5f);
-  uint16_t half = (uint16_t)(0.5f * 127.0f) << 7;
+  uint16_t half = (uint16_t)(0.5f * 127.0f + 0.5f) << 7;
   assert(engine.dacValues()[0] == half);
 
   engine.noteOff(0, 60);
@@ -670,11 +670,11 @@ static void test_velocity_cross_channel_fallback() {
   engine.setDacChannel(0, -1);
 
   engine.noteOn(0, 60, 0.25f);
-  uint16_t ch0Vel = (uint16_t)(0.25f * 127.0f) << 7;
+  uint16_t ch0Vel = (uint16_t)(0.25f * 127.0f + 0.5f) << 7;
   assert(engine.dacValues()[0] == ch0Vel);
 
   engine.noteOn(1, 60, 0.75f);
-  uint16_t ch1Vel = (uint16_t)(0.75f * 127.0f) << 7;
+  uint16_t ch1Vel = (uint16_t)(0.75f * 127.0f + 0.5f) << 7;
   assert(engine.dacValues()[0] == ch1Vel);
 
   engine.noteOff(1, 60);
@@ -688,7 +688,223 @@ static void test_velocity_cross_channel_fallback() {
   printf("velocity_cross_channel_fallback passed\n");
 }
 
+static void test_gate_channel_change_clears_gate() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.setGateChannel(0, 1);
+  assert(!(engine.gateMask() & 1));
+
+  engine.noteOn(1, 64, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  printf("gate_channel_change_clears_gate passed\n");
+}
+
+static void test_gate_note_change_clears_gate() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.gateMask() & 1);
+
+  engine.setGateNote(0, 72);
+  assert(!(engine.gateMask() & 1));
+
+  printf("gate_note_change_clears_gate passed\n");
+}
+
+static void test_dac_channel_change_clears_stack() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacPitch);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 48, 0.8f);
+  engine.noteOn(0, 60, 0.8f);
+  uint16_t pitch60 = engine.dacValues()[0];
+
+  engine.setDacChannel(0, 1);
+
+  engine.noteOn(1, 36, 0.8f);
+  uint16_t pitch36 = engine.dacValues()[0];
+  assert(pitch36 < pitch60);
+
+  engine.noteOff(1, 36);
+  assert(engine.dacValues()[0] == pitch36);
+
+  printf("dac_channel_change_clears_stack passed\n");
+}
+
+static void test_dac_mode_change_clears_value() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 1.0f);
+  assert(engine.dacValues()[0] == 127 << 7);
+
+  engine.setDacMode(0, kDacOff);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("dac_mode_change_clears_value passed\n");
+}
+
+static void test_deserialize_clears_runtime() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.gateMask() & 1);
+  assert(engine.dacValues()[0] > 0);
+
+  int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
+  MidiEngine defaults;
+  defaults.serialize(buf);
+
+  engine.deserialize(buf);
+  assert(engine.gateMask() == 0);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("deserialize_clears_runtime passed\n");
+}
+
+static void test_dac_mode_pitch_to_cc_populates_value() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacPitch);
+  engine.setDacChannel(0, -1);
+  engine.setCcNum(0, 7);
+
+  engine.setCcValue(7, 100);
+
+  engine.noteOn(0, 48, 0.8f);
+  uint16_t pitchVal = engine.dacValues()[0];
+  assert(pitchVal > 0);
+
+  engine.setDacMode(0, kDacCC);
+  assert(engine.dacValues()[0] == (uint16_t)100 << 7);
+
+  printf("dac_mode_pitch_to_cc_populates_value passed\n");
+}
+
+static void test_dac_channel_change_zeros_pitch() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacPitch);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 48, 0.8f);
+  assert(engine.dacValues()[0] > 0);
+
+  engine.setDacChannel(0, 0);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("dac_channel_change_zeros_pitch passed\n");
+}
+
+static void test_note_stack_top_empty() {
+  NoteStack stack;
+  assert(stack.empty());
+  const NoteEntry& e = stack.top();
+  assert(e.note == 0);
+  assert(e.velocity == 0);
+  assert(e.channel == 0);
+
+  printf("note_stack_top_empty passed\n");
+}
+
+static void test_cc_updates_without_active_note() {
+  MidiEngine engine;
+  engine.setDacMode(0, kDacCC);
+  engine.setDacChannel(0, -1);
+  engine.setCcNum(0, 7);
+
+  engine.setCcValue(7, 64);
+  assert(engine.dacValues()[0] == (uint16_t)64 << 7);
+
+  engine.setCcValue(7, 100);
+  assert(engine.dacValues()[0] == (uint16_t)100 << 7);
+
+  engine.setCcNum(0, 1);
+  engine.setCcValue(1, 50);
+  assert(engine.dacValues()[0] == (uint16_t)50 << 7);
+
+  printf("cc_updates_without_active_note passed\n");
+}
+
+static void test_dac_mode_to_pitch_zeros_value() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 1.0f);
+  assert(engine.dacValues()[0] > 0);
+
+  engine.setDacMode(0, kDacPitch);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("dac_mode_to_pitch_zeros_value passed\n");
+}
+
+static void test_velocity_rounding() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 1.0f);
+  assert(engine.dacValues()[0] == (uint16_t)127 << 7);
+
+  engine.noteOff(0, 60);
+  engine.noteOn(0, 60, 0.5f);
+  uint16_t halfVel = engine.dacValues()[0];
+  assert(halfVel == (uint16_t)64 << 7);
+
+  printf("velocity_rounding passed\n");
+}
+
+static void test_out_of_bounds_gate_ignored() {
+  MidiEngine engine;
+  engine.setGateChannel(-1, 0);
+  engine.setGateChannel(8, 0);
+  engine.setGateNote(-1, 60);
+  engine.setGateNote(8, 60);
+  engine.setDacMode(-1, kDacPitch);
+  engine.setDacMode(8, kDacPitch);
+  engine.setDacChannel(-1, 0);
+  engine.setDacChannel(8, 0);
+  engine.setCcNum(-1, 7);
+  engine.setCcNum(8, 7);
+  engine.clearGateRuntime(-1);
+  engine.clearGateRuntime(8);
+
+  assert(engine.gateMask() == 0);
+  printf("out_of_bounds_gate_ignored passed\n");
+}
+
 int main() {
+  test_note_stack_top_empty();
   test_note_stack_push_pop();
   test_note_stack_retrigger();
   test_note_stack_overflow();
@@ -723,6 +939,17 @@ int main() {
   test_cross_channel_note_independence();
   test_cc_dac_independent_of_gate();
   test_velocity_cross_channel_fallback();
+  test_gate_channel_change_clears_gate();
+  test_gate_note_change_clears_gate();
+  test_dac_channel_change_clears_stack();
+  test_dac_mode_change_clears_value();
+  test_deserialize_clears_runtime();
+  test_dac_mode_pitch_to_cc_populates_value();
+  test_dac_channel_change_zeros_pitch();
+  test_cc_updates_without_active_note();
+  test_dac_mode_to_pitch_zeros_value();
+  test_velocity_rounding();
+  test_out_of_bounds_gate_ignored();
   printf("\nAll tests passed!\n");
   return 0;
 }
