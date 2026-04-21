@@ -55,11 +55,43 @@ class MidiEngine {
  public:
   MidiEngine() { reset(); }
 
-  void setGateChannel(int gate, int8_t channel) { gateChannel_[gate] = channel; }
-  void setGateNote(int gate, int16_t note) { gateNote_[gate] = note; }
-  void setDacMode(int gate, uint8_t mode) { dacMode_[gate] = mode; }
-  void setDacChannel(int gate, int8_t channel) { dacChannel_[gate] = channel; }
-  void setCcNum(int gate, uint8_t cc) { ccNum_[gate] = cc; }
+  void setGateChannel(int gate, int8_t channel) {
+    if (gateChannel_[gate] == channel)
+      return;
+    gateChannel_[gate] = channel;
+    clearGateRuntime(gate);
+  }
+
+  void setGateNote(int gate, int16_t note) {
+    if (gateNote_[gate] == note)
+      return;
+    gateNote_[gate] = note;
+    clearGateRuntime(gate);
+  }
+
+  void setDacMode(int gate, uint8_t mode) {
+    if (dacMode_[gate] == mode)
+      return;
+    dacMode_[gate] = mode;
+    noteStacks_[gate].count = 0;
+    if (mode == kDacOff || mode == kDacVelocity)
+      dacValues_[gate] = 0;
+  }
+
+  void setDacChannel(int gate, int8_t channel) {
+    if (dacChannel_[gate] == channel)
+      return;
+    dacChannel_[gate] = channel;
+    noteStacks_[gate].count = 0;
+    if (dacMode_[gate] == kDacVelocity)
+      dacValues_[gate] = 0;
+  }
+
+  void setCcNum(int gate, uint8_t cc) {
+    ccNum_[gate] = cc;
+    if (dacMode_[gate] == kDacCC && (gateMask_ & (1 << gate)))
+      dacValues_[gate] = (uint16_t)ccValues_[cc] << 7;
+  }
 
   void setCcValue(uint8_t cc, uint8_t value) {
     ccValues_[cc] = value;
@@ -137,6 +169,11 @@ class MidiEngine {
     return false;
   }
 
+  void clearGateRuntime(int gate) {
+    gateStacks_[gate].count = 0;
+    gateMask_ &= ~(1 << gate);
+  }
+
   void clearRuntime() {
     gateMask_ = 0;
     prevGateMask_ = 0;
@@ -173,6 +210,7 @@ class MidiEngine {
   }
 
   void deserialize(const int32_t* in) {
+    clearRuntime();
     for (int i = 0; i < kNumGates; i++) {
       int32_t ch = *in++;
       int32_t note = *in++;
