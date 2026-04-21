@@ -5,6 +5,17 @@
 
 using namespace tram8;
 
+static void test_note_stack_top_empty() {
+  NoteStack stack;
+  assert(stack.empty());
+  const NoteEntry& e = stack.top();
+  assert(e.note == 0);
+  assert(e.velocity == 0);
+  assert(e.channel == 0);
+
+  printf("note_stack_top_empty passed\n");
+}
+
 static void test_note_stack_push_pop() {
   NoteStack stack;
   assert(stack.empty());
@@ -77,7 +88,7 @@ static void test_velocity_mode() {
   assert(engine.dacValues()[0] == 127 << 7);
 
   engine.noteOn(0, 60, 0.5f);
-  uint16_t half = (uint16_t)(0.5f * 127.0f) << 7;
+  uint16_t half = (uint16_t)(0.5f * 127.0f + 0.5f) << 7;
   assert(engine.dacValues()[0] == half);
 
   engine.noteOff(0, 60);
@@ -826,7 +837,45 @@ static void test_dac_mode_to_pitch_zeros_value() {
   printf("dac_mode_to_pitch_zeros_value passed\n");
 }
 
+static void test_velocity_rounding() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 1.0f);
+  assert(engine.dacValues()[0] == (uint16_t)127 << 7);
+
+  engine.noteOff(0, 60);
+  engine.noteOn(0, 60, 0.5f);
+  uint16_t halfVel = engine.dacValues()[0];
+  assert(halfVel == (uint16_t)64 << 7);
+
+  printf("velocity_rounding passed\n");
+}
+
+static void test_out_of_bounds_gate_ignored() {
+  MidiEngine engine;
+  engine.setGateChannel(-1, 0);
+  engine.setGateChannel(8, 0);
+  engine.setGateNote(-1, 60);
+  engine.setGateNote(8, 60);
+  engine.setDacMode(-1, kDacPitch);
+  engine.setDacMode(8, kDacPitch);
+  engine.setDacChannel(-1, 0);
+  engine.setDacChannel(8, 0);
+  engine.setCcNum(-1, 7);
+  engine.setCcNum(8, 7);
+  engine.clearGateRuntime(-1);
+  engine.clearGateRuntime(8);
+
+  assert(engine.gateMask() == 0);
+  printf("out_of_bounds_gate_ignored passed\n");
+}
+
 int main() {
+  test_note_stack_top_empty();
   test_note_stack_push_pop();
   test_note_stack_retrigger();
   test_note_stack_overflow();
@@ -869,6 +918,8 @@ int main() {
   test_cc_dac_independent_of_gate();
   test_cc_updates_without_active_note();
   test_dac_mode_to_pitch_zeros_value();
+  test_velocity_rounding();
+  test_out_of_bounds_gate_ignored();
   printf("\nAll tests passed!\n");
   return 0;
 }

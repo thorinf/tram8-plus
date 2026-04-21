@@ -131,10 +131,12 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
       break;
     if (state->read(&modeVal, sizeof(int32)) != kResultOk)
       break;
-    if (state->read(&dacChVal, sizeof(int32)) != kResultOk)
+    if (state->read(&dacChVal, sizeof(int32)) != kResultOk) {
       dacChVal = -1;
-    if (state->read(&ccNumVal, sizeof(int32)) != kResultOk)
       ccNumVal = 1;
+    } else if (state->read(&ccNumVal, sizeof(int32)) != kResultOk) {
+      ccNumVal = 1;
+    }
 
     int chStep = chVal + 1;
     if (chStep < 0)
