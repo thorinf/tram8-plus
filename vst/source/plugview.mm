@@ -1,6 +1,7 @@
 #include "plugview.h"
 #include "cids.h"
 #include "controller.h"
+#include "midi_engine.h"
 #include "ui_html.h"
 #include "pluginterfaces/gui/iplugview.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"

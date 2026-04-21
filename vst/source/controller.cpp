@@ -1,6 +1,7 @@
 #include "controller.h"
 #include "base/source/fstring.h"
 #include "cids.h"
+#include "midi_engine.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "plugview.h"
 #include "public.sdk/source/vst/vstparameters.h"
