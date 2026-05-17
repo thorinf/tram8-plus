@@ -13,6 +13,7 @@ void gpio_init(void);
 void led_init(void);
 void button_init(void);
 void gate_set(uint8_t gate_index, uint8_t state);
+void gate_set_mask(uint8_t mask);
 void led_on(void);
 void led_off(void);
 uint8_t read_button(void);
