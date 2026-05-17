@@ -5,6 +5,7 @@
 #include "pluginterfaces/base/ibstream.h"
 #include "plugview.h"
 #include "public.sdk/source/vst/vstparameters.h"
+#include "state_format.h"
 
 #include <cstdio>
 
@@ -123,20 +124,17 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
   if (!state)
     return kResultFalse;
 
+  int32_t stateWords[kNumGates * MidiEngine::kStateWordsPerGate];
+  if (!readStateWords(state, stateWords))
+    return kResultFalse;
+
   for (int i = 0; i < 8; i++) {
-    int32 chVal = 0, noteVal = 0, modeVal = 0, dacChVal = -1, ccNumVal = 1;
-    if (state->read(&chVal, sizeof(int32)) != kResultOk)
-      break;
-    if (state->read(&noteVal, sizeof(int32)) != kResultOk)
-      break;
-    if (state->read(&modeVal, sizeof(int32)) != kResultOk)
-      break;
-    if (state->read(&dacChVal, sizeof(int32)) != kResultOk) {
-      dacChVal = -1;
-      ccNumVal = 1;
-    } else if (state->read(&ccNumVal, sizeof(int32)) != kResultOk) {
-      ccNumVal = 1;
-    }
+    int off = i * MidiEngine::kStateWordsPerGate;
+    int32 chVal = stateWords[off + 0];
+    int32 noteVal = stateWords[off + 1];
+    int32 modeVal = stateWords[off + 2];
+    int32 dacChVal = stateWords[off + 3];
+    int32 ccNumVal = stateWords[off + 4];
 
     int chStep = chVal + 1;
     if (chStep < 0)

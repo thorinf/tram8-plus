@@ -1,9 +1,87 @@
 #include "../source/midi_engine.h"
+#include "../source/state_format.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 using namespace tram8;
+
+class TestStream : public Steinberg::IBStream {
+ public:
+  Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID, void** obj) override {
+    if (obj)
+      *obj = nullptr;
+    return Steinberg::kNoInterface;
+  }
+
+  Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
+  Steinberg::uint32 PLUGIN_API release() override { return 1; }
+
+  Steinberg::tresult PLUGIN_API read(void* buffer, Steinberg::int32 numBytes, Steinberg::int32* numBytesRead) override {
+    if (!buffer || numBytes < 0)
+      return Steinberg::kInvalidArgument;
+    size_t available = data_.size() - cursor_;
+    size_t count = std::min<size_t>((size_t)numBytes, available);
+    if (count > 0)
+      memcpy(buffer, data_.data() + cursor_, count);
+    cursor_ += count;
+    if (numBytesRead)
+      *numBytesRead = (Steinberg::int32)count;
+    return Steinberg::kResultOk;
+  }
+
+  Steinberg::tresult PLUGIN_API write(void* buffer,
+                                      Steinberg::int32 numBytes,
+                                      Steinberg::int32* numBytesWritten) override {
+    if (!buffer || numBytes < 0)
+      return Steinberg::kInvalidArgument;
+    size_t required = cursor_ + (size_t)numBytes;
+    if (data_.size() < required)
+      data_.resize(required);
+    memcpy(data_.data() + cursor_, buffer, (size_t)numBytes);
+    cursor_ = required;
+    if (numBytesWritten)
+      *numBytesWritten = numBytes;
+    return Steinberg::kResultOk;
+  }
+
+  Steinberg::tresult PLUGIN_API seek(Steinberg::int64 pos, Steinberg::int32 mode, Steinberg::int64* result) override {
+    Steinberg::int64 next = (Steinberg::int64)cursor_;
+    if (mode == Steinberg::IBStream::kIBSeekSet)
+      next = pos;
+    else if (mode == Steinberg::IBStream::kIBSeekCur)
+      next += pos;
+    else if (mode == Steinberg::IBStream::kIBSeekEnd)
+      next = (Steinberg::int64)data_.size() + pos;
+    else
+      return Steinberg::kInvalidArgument;
+    if (next < 0 || next > (Steinberg::int64)data_.size())
+      return Steinberg::kInvalidArgument;
+    cursor_ = (size_t)next;
+    if (result)
+      *result = next;
+    return Steinberg::kResultOk;
+  }
+
+  Steinberg::tresult PLUGIN_API tell(Steinberg::int64* pos) override {
+    if (!pos)
+      return Steinberg::kInvalidArgument;
+    *pos = (Steinberg::int64)cursor_;
+    return Steinberg::kResultOk;
+  }
+
+  void rewind() { cursor_ = 0; }
+
+ private:
+  std::vector<uint8_t> data_;
+  size_t cursor_ = 0;
+};
+
+static void write_test_int(TestStream& stream, int32_t value) {
+  assert(streamWriteInt32(&stream, value));
+}
 
 static void test_note_stack_push_pop() {
   NoteStack stack;
@@ -1040,6 +1118,100 @@ static void test_out_of_bounds_gate_ignored() {
   printf("out_of_bounds_gate_ignored passed\n");
 }
 
+static void test_state_format_versioned_roundtrip() {
+  int32_t words[kNumGates * MidiEngine::kStateWordsPerGate];
+  for (int i = 0; i < kNumGates; i++) {
+    int off = i * MidiEngine::kStateWordsPerGate;
+    words[off + 0] = i - 1;
+    words[off + 1] = 60 + i;
+    words[off + 2] = i % kDacModeCount;
+    words[off + 3] = 15 - i;
+    words[off + 4] = 20 + i;
+  }
+
+  TestStream stream;
+  assert(writeStateWords(&stream, words));
+  stream.rewind();
+
+  int32_t decoded[kNumGates * MidiEngine::kStateWordsPerGate] = {0};
+  assert(readStateWords(&stream, decoded));
+  assert(memcmp(words, decoded, sizeof(words)) == 0);
+
+  printf("state_format_versioned_roundtrip passed\n");
+}
+
+static void test_state_format_reads_legacy_five_word_state() {
+  int32_t words[kNumGates * MidiEngine::kStateWordsPerGate];
+  TestStream stream;
+  for (int i = 0; i < kNumGates; i++) {
+    int off = i * MidiEngine::kStateWordsPerGate;
+    words[off + 0] = i;
+    words[off + 1] = 40 + i;
+    words[off + 2] = i % kDacModeCount;
+    words[off + 3] = 7 - i;
+    words[off + 4] = 64 + i;
+    for (int field = 0; field < MidiEngine::kStateWordsPerGate; field++)
+      write_test_int(stream, words[off + field]);
+  }
+  stream.rewind();
+
+  int32_t decoded[kNumGates * MidiEngine::kStateWordsPerGate] = {0};
+  assert(readStateWords(&stream, decoded));
+  assert(memcmp(words, decoded, sizeof(words)) == 0);
+
+  printf("state_format_reads_legacy_five_word_state passed\n");
+}
+
+static void test_state_format_reads_legacy_three_word_state() {
+  TestStream stream;
+  for (int i = 0; i < kNumGates; i++) {
+    write_test_int(stream, i);
+    write_test_int(stream, 50 + i);
+    write_test_int(stream, i % kDacModeCount);
+  }
+  stream.rewind();
+
+  int32_t decoded[kNumGates * MidiEngine::kStateWordsPerGate] = {0};
+  assert(readStateWords(&stream, decoded));
+  for (int i = 0; i < kNumGates; i++) {
+    int off = i * MidiEngine::kStateWordsPerGate;
+    assert(decoded[off + 0] == i);
+    assert(decoded[off + 1] == 50 + i);
+    assert(decoded[off + 2] == i % kDacModeCount);
+    assert(decoded[off + 3] == -1);
+    assert(decoded[off + 4] == 1);
+  }
+
+  printf("state_format_reads_legacy_three_word_state passed\n");
+}
+
+static void test_state_format_rejects_truncated_state() {
+  TestStream stream;
+  write_test_int(stream, kStateMagic);
+  write_test_int(stream, kStateVersion);
+  write_test_int(stream, 123);
+  stream.rewind();
+
+  int32_t decoded[kNumGates * MidiEngine::kStateWordsPerGate] = {0};
+  assert(!readStateWords(&stream, decoded));
+
+  printf("state_format_rejects_truncated_state passed\n");
+}
+
+static void test_state_format_rejects_unknown_version() {
+  TestStream stream;
+  write_test_int(stream, kStateMagic);
+  write_test_int(stream, kStateVersion + 1);
+  for (int i = 0; i < kNumGates * MidiEngine::kStateWordsPerGate; i++)
+    write_test_int(stream, 0);
+  stream.rewind();
+
+  int32_t decoded[kNumGates * MidiEngine::kStateWordsPerGate] = {0};
+  assert(!readStateWords(&stream, decoded));
+
+  printf("state_format_rejects_unknown_version passed\n");
+}
+
 int main() {
   test_note_stack_top_empty();
   test_note_stack_push_pop();
@@ -1093,6 +1265,11 @@ int main() {
   test_dac_mode_to_pitch_zeros_value();
   test_velocity_rounding();
   test_out_of_bounds_gate_ignored();
+  test_state_format_versioned_roundtrip();
+  test_state_format_reads_legacy_five_word_state();
+  test_state_format_reads_legacy_three_word_state();
+  test_state_format_rejects_truncated_state();
+  test_state_format_rejects_unknown_version();
   printf("\nAll tests passed!\n");
   return 0;
 }

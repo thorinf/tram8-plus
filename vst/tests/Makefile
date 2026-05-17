@@ -1,5 +1,5 @@
 CXX = c++
-CXXFLAGS = -Wall -Wextra -std=c++17 -g -I../source
+CXXFLAGS = -Wall -Wextra -std=c++17 -g -I../source -I../external/vst3sdk
 
 TESTS = test_midi_engine
 
