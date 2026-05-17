@@ -11,7 +11,23 @@ concurrency:
   group: release-${{ github.ref }}
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches VERSION file
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$file_version" ]; then
+            echo "Tag v$tag does not match VERSION file ($file_version)"
+            exit 1
+          fi
+          echo "Tag and VERSION agree: $tag"
+
   firmware:
+    needs: check-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +57,7 @@ jobs:
           path: firmware/build/tram8-firmware.syx
 
   vst:
+    needs: check-version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
