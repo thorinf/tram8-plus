@@ -5,6 +5,7 @@
 #include "midi_learn.h"
 #include "midi_mapper.h"
 #include "midi_parser.h"
+#include "note_stack.h"
 #include "twi_control.h"
 #include "ui.h"
 #include <avr/eeprom.h>
@@ -89,12 +90,63 @@ static inline uint8_t pop_lsb(uint8_t* mask) {
   return gate;
 }
 
-static void set_mode(uint8_t mode) {
-  module_mode = mode;
-  handle_midi_message = (mode == MODE_CC) ? handle_cc : handle_velocity;
+static note_stack_t gate_stacks[NUM_GATES];
+
+static void clear_gate_runtime(void) {
   for (uint8_t i = 0; i < NUM_GATES; ++i) {
     gate_set(i, 0);
     max5825_write(i, 0);
+    note_stack_clear(&gate_stacks[i]);
+  }
+}
+
+static void set_mode(uint8_t mode) {
+  module_mode = mode;
+  handle_midi_message = (mode == MODE_CC) ? handle_cc : handle_velocity;
+  clear_gate_runtime();
+}
+
+static void velocity_note_on(uint8_t note, uint8_t velocity) {
+  uint8_t gate_candidates = midi_mapper_get_gates(note);
+  while (gate_candidates) {
+    uint8_t gate_index = pop_lsb(&gate_candidates);
+    note_stack_push(&gate_stacks[gate_index], note, velocity);
+    gate_set(gate_index, 1);
+    max5825_write(gate_index, (uint16_t)velocity << 5);
+  }
+}
+
+static void velocity_note_off(uint8_t note) {
+  uint8_t gate_candidates = midi_mapper_get_gates(note);
+  while (gate_candidates) {
+    uint8_t gate_index = pop_lsb(&gate_candidates);
+    note_stack_remove(&gate_stacks[gate_index], note);
+    if (note_stack_empty(&gate_stacks[gate_index])) {
+      gate_set(gate_index, 0);
+      max5825_write(gate_index, 0);
+    } else {
+      max5825_write(gate_index, (uint16_t)note_stack_top_vel(&gate_stacks[gate_index]) << 5);
+    }
+  }
+}
+
+static void cc_note_on(uint8_t note, uint8_t velocity) {
+  uint8_t gate_candidates = midi_mapper_get_gates(note);
+  while (gate_candidates) {
+    uint8_t gate_index = pop_lsb(&gate_candidates);
+    note_stack_push(&gate_stacks[gate_index], note, velocity);
+    gate_set(gate_index, 1);
+  }
+}
+
+static void cc_note_off(uint8_t note) {
+  uint8_t gate_candidates = midi_mapper_get_gates(note);
+  while (gate_candidates) {
+    uint8_t gate_index = pop_lsb(&gate_candidates);
+    note_stack_remove(&gate_stacks[gate_index], note);
+    if (note_stack_empty(&gate_stacks[gate_index])) {
+      gate_set(gate_index, 0);
+    }
   }
 }
 
@@ -118,29 +170,16 @@ static void handle_velocity(const MidiMsg* msg) {
     return;
   }
 
-  uint8_t gate_candidates;
-
   switch (status) {
     case 0x90:
-      gate_candidates = midi_mapper_get_gates(note);
-      while (gate_candidates) {
-        uint8_t gate_index = pop_lsb(&gate_candidates);
-        if (velocity > 0) {
-          gate_set(gate_index, 1);
-          max5825_write(gate_index, (uint16_t)velocity << 5);
-        } else {
-          gate_set(gate_index, 0);
-          max5825_write(gate_index, 0);
-        }
+      if (velocity > 0) {
+        velocity_note_on(note, velocity);
+      } else {
+        velocity_note_off(note);
       }
       break;
     case 0x80:
-      gate_candidates = midi_mapper_get_gates(note);
-      while (gate_candidates) {
-        uint8_t gate_index = pop_lsb(&gate_candidates);
-        gate_set(gate_index, 0);
-        max5825_write(gate_index, 0);
-      }
+      velocity_note_off(note);
       break;
   }
 }
@@ -165,26 +204,16 @@ static void handle_cc(const MidiMsg* msg) {
     return;
   }
 
-  uint8_t gate_candidates;
-
   switch (status) {
     case 0x90:
-      gate_candidates = midi_mapper_get_gates(note);
-      while (gate_candidates) {
-        uint8_t gate_index = pop_lsb(&gate_candidates);
-        if (velocity > 0) {
-          gate_set(gate_index, 1);
-        } else {
-          gate_set(gate_index, 0);
-        }
+      if (velocity > 0) {
+        cc_note_on(note, velocity);
+      } else {
+        cc_note_off(note);
       }
       break;
     case 0x80:
-      gate_candidates = midi_mapper_get_gates(note);
-      while (gate_candidates) {
-        uint8_t gate_index = pop_lsb(&gate_candidates);
-        gate_set(gate_index, 0);
-      }
+      cc_note_off(note);
       break;
     case 0xB0:
       if (msg->d1 >= 69 && msg->d1 <= 76) {
@@ -346,6 +375,7 @@ static void menu_mode_loop(void) {
     if (learn_button.state == BUTTON_HELD) {
       switch (menu_index) {
         case 0:
+          clear_gate_runtime();
           learn_begin();
           return;
         case 1:
