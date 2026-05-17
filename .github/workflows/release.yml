@@ -87,6 +87,8 @@ jobs:
     needs: [firmware, vst]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: firmware
@@ -97,8 +99,29 @@ jobs:
           name: vst
           path: artifacts
 
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          section="$(awk -v ver="$version" '
+            /^## / {
+              if (in_section) exit
+              if ($2 == ver) { in_section=1; next }
+            }
+            in_section { print }
+          ' CHANGELOG.md)"
+          if [ -z "$section" ]; then
+            echo "No CHANGELOG.md entry for version $version"
+            exit 1
+          fi
+          {
+            echo "body<<CHANGELOG_EOF"
+            printf '%s\n' "$section"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
           files: artifacts/*
