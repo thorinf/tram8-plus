@@ -134,7 +134,12 @@ class MidiEngine {
       if (gateChMatch && gateNoteMatch) {
         gateStacks_[g].push(channel, note, vel);
         gateMask_ |= (1 << g);
+        if (dacMode_[g] == kDacVelocity)
+          dacValues_[g] = (uint16_t)vel << 7;
       }
+
+      if (dacMode_[g] == kDacVelocity)
+        continue;
 
       bool dacChMatch = (dacChannel_[g] == -1) || (dacChannel_[g] == channel);
       if (dacChMatch) {
@@ -150,17 +155,23 @@ class MidiEngine {
       bool gateNoteMatch = (gateNote_[g] == -1) || (gateNote_[g] == note);
       if (gateChMatch && gateNoteMatch) {
         gateStacks_[g].remove(channel, note);
-        if (gateStacks_[g].empty())
+        if (gateStacks_[g].empty()) {
           gateMask_ &= ~(1 << g);
+          if (dacMode_[g] == kDacVelocity)
+            dacValues_[g] = 0;
+        } else if (dacMode_[g] == kDacVelocity) {
+          dacValues_[g] = (uint16_t)gateStacks_[g].top().velocity << 7;
+        }
       }
+
+      if (dacMode_[g] == kDacVelocity)
+        continue;
 
       bool dacChMatch = (dacChannel_[g] == -1) || (dacChannel_[g] == channel);
       if (dacChMatch) {
         noteStacks_[g].remove(channel, note);
         if (!noteStacks_[g].empty()) {
           updateDac(g, noteStacks_[g].top().note, noteStacks_[g].top().velocity);
-        } else if (dacMode_[g] == kDacVelocity) {
-          dacValues_[g] = 0;
         }
       }
     }
@@ -195,6 +206,8 @@ class MidiEngine {
       return;
     gateStacks_[gate].count = 0;
     gateMask_ &= ~(1 << gate);
+    if (dacMode_[gate] == kDacVelocity)
+      dacValues_[gate] = 0;
   }
 
   void clearRuntime() {
