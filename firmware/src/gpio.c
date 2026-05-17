@@ -81,3 +81,15 @@ void gate_set(uint8_t gate_index, uint8_t state) {
     *port_reg &= (uint8_t)~mask;
   }
 }
+
+void gate_set_mask(uint8_t mask) {
+  uint8_t hw_mask = gate_active_high ? mask : (uint8_t)~mask;
+
+  if (hw_mask & 0x01) {
+    PORTB |= (1 << PB0);
+  } else {
+    PORTB &= (uint8_t)~(1 << PB0);
+  }
+
+  PORTD = (uint8_t)((PORTD & 0x01) | (hw_mask & 0xFE));
+}
