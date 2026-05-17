@@ -156,6 +156,10 @@ tram8_parse(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]
     return -1;
   if (buf[2] != TRAM8_CMD_STATE)
     return -1;
+  if (len != TRAM8_LEN_GATES && len != TRAM8_LEN_COARSE && len != TRAM8_LEN_FULL)
+    return -1;
+  if (buf[len - 1] != TRAM8_SYSEX_END)
+    return -1;
 
   *gate_mask = (buf[3] & 0x7F) | ((buf[4] & 0x01) << 7);
 
@@ -164,9 +168,6 @@ tram8_parse(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]
     return 0;
   }
 
-  if (len < TRAM8_LEN_COARSE)
-    return -1;
-
   for (int i = 0; i < 8; i++)
     dac[i] = (uint16_t)(buf[5 + i] & 0x7F) << 5;
 
@@ -174,9 +175,6 @@ tram8_parse(const uint8_t* buf, uint8_t len, uint8_t* gate_mask, uint16_t dac[8]
     *form = TRAM8_FORM_COARSE;
     return 0;
   }
-
-  if (len < TRAM8_LEN_FULL)
-    return -1;
 
   uint32_t acc = 0;
   uint8_t bits = 0;
