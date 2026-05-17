@@ -45,10 +45,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Package firmware SysEx
         run: |
-          pip install intelhex
-          python tools/firmware-packager.py firmware/build/main.hex -v
+          uv run --frozen python tools/firmware-packager.py firmware/build/main.hex -v
           mv firmware/build/main_firmware.syx firmware/build/tram8-firmware.syx
 
       - uses: actions/upload-artifact@v4
@@ -69,6 +72,9 @@ jobs:
 
       - name: Build
         run: cmake --build vst/build --config Release
+
+      - name: Run tests
+        run: make -C vst/tests test
 
       - name: Sign (ad-hoc)
         run: codesign --force --deep -s - vst/build/VST3/Release/tram8-bridge.vst3
