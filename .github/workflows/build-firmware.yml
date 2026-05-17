@@ -1,0 +1,31 @@
+name: Build firmware
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'firmware/**'
+      - 'protocol/**'
+      - '.github/workflows/build-firmware.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-firmware-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AVR toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-avr avr-libc
+
+      - name: Build firmware
+        run: make -C firmware
+
+      - name: Run tests
+        run: make -C firmware/tests test
