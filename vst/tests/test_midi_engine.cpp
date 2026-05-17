@@ -237,6 +237,107 @@ static void test_dac_independence() {
   printf("dac_independence passed\n");
 }
 
+static void test_velocity_follows_gate_filter() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, 60);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 61, 1.0f);
+  assert(!(engine.gateMask() & 1));
+  assert(engine.dacValues()[0] == 0);
+
+  engine.noteOff(0, 61);
+  assert(engine.dacValues()[0] == 0);
+
+  engine.noteOn(0, 60, 0.5f);
+  assert(engine.gateMask() & 1);
+  uint16_t expected = (uint16_t)(0.5f * 127.0f + 0.5f) << 7;
+  assert(engine.dacValues()[0] == expected);
+
+  engine.noteOff(0, 60);
+  assert(!(engine.gateMask() & 1));
+  assert(engine.dacValues()[0] == 0);
+
+  printf("velocity_follows_gate_filter passed\n");
+}
+
+static void test_velocity_unaffected_by_non_gate_notes() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, 60);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  uint16_t cVel = (uint16_t)(0.8f * 127.0f + 0.5f) << 7;
+  assert(engine.dacValues()[0] == cVel);
+
+  engine.noteOn(0, 61, 0.2f);
+  assert(engine.dacValues()[0] == cVel);
+
+  engine.noteOff(0, 61);
+  assert(engine.dacValues()[0] == cVel);
+
+  engine.noteOff(0, 60);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("velocity_unaffected_by_non_gate_notes passed\n");
+}
+
+static void test_velocity_rollback_with_overlap() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, -1);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.4f);
+  uint16_t v60 = (uint16_t)(0.4f * 127.0f + 0.5f) << 7;
+  assert(engine.dacValues()[0] == v60);
+
+  engine.noteOn(0, 62, 0.9f);
+  uint16_t v62 = (uint16_t)(0.9f * 127.0f + 0.5f) << 7;
+  assert(engine.dacValues()[0] == v62);
+
+  engine.noteOff(0, 62);
+  assert(engine.gateMask() & 1);
+  assert(engine.dacValues()[0] == v60);
+
+  engine.noteOff(0, 60);
+  assert(!(engine.gateMask() & 1));
+  assert(engine.dacValues()[0] == 0);
+
+  printf("velocity_rollback_with_overlap passed\n");
+}
+
+static void test_velocity_cleared_on_gate_config_change() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, 60);
+  engine.setDacMode(0, kDacVelocity);
+  engine.setDacChannel(0, -1);
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.gateMask() & 1);
+  assert(engine.dacValues()[0] > 0);
+
+  engine.setGateNote(0, 72);
+  assert(!(engine.gateMask() & 1));
+  assert(engine.dacValues()[0] == 0);
+
+  engine.noteOn(0, 72, 0.8f);
+  assert(engine.gateMask() & 1);
+  assert(engine.dacValues()[0] > 0);
+
+  engine.setGateChannel(0, 5);
+  assert(!(engine.gateMask() & 1));
+  assert(engine.dacValues()[0] == 0);
+
+  printf("velocity_cleared_on_gate_config_change passed\n");
+}
+
 static void test_state_changed() {
   MidiEngine engine;
   engine.setGateChannel(0, -1);
@@ -918,6 +1019,10 @@ int main() {
   test_gate_note_filter();
   test_gate_channel_filter();
   test_dac_independence();
+  test_velocity_follows_gate_filter();
+  test_velocity_unaffected_by_non_gate_notes();
+  test_velocity_rollback_with_overlap();
+  test_velocity_cleared_on_gate_config_change();
   test_state_changed();
   test_dac_changed();
   test_has_pitch_mode();
