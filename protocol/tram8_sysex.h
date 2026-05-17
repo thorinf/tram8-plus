@@ -42,17 +42,30 @@ extern "C" {
  *   F0 7D 10 GL GH D0..D7 L0 L1 L2 L3 L4 L5 F7
  *   Low 5 bits packed LSB-first: 8x5 = 40 bits -> ceil(40/7) = 6 bytes
  *   dac[i] = (dac_hi[i] << 5) | low5[i]
+ *
+ * Target frames:
+ *   F0 7D 2n F7       set gate n
+ *   F0 7D 3n F7       clear gate n
+ *   F0 7D 4n D F7     coarse DAC n
+ *   F0 7D 5n H L F7   full DAC n
  */
 
 #define TRAM8_SYSEX_START 0xF0
 #define TRAM8_SYSEX_END 0xF7
 #define TRAM8_MANUFACTURER_ID 0x7D
 #define TRAM8_CMD_STATE 0x10
+#define TRAM8_CMD_GATE_SET_BASE 0x20
+#define TRAM8_CMD_GATE_CLEAR_BASE 0x30
+#define TRAM8_CMD_DAC_COARSE_BASE 0x40
+#define TRAM8_CMD_DAC_FULL_BASE 0x50
 
 #define TRAM8_NUM_GATES 8
 #define TRAM8_DAC_BITS 12
 #define TRAM8_DAC_MAX ((1 << TRAM8_DAC_BITS) - 1)
 
+#define TRAM8_LEN_GATE_TARGET 4
+#define TRAM8_LEN_DAC_COARSE_TARGET 5
+#define TRAM8_LEN_DAC_FULL_TARGET 6
 #define TRAM8_LEN_GATES 6
 #define TRAM8_LEN_COARSE 14
 #define TRAM8_LEN_FULL 20
@@ -98,6 +111,39 @@ static inline uint8_t tram8_pack(uint8_t* buf, uint8_t gate_mask, const uint16_t
 
   buf[pos] = TRAM8_SYSEX_END;
   return pos + 1;
+}
+
+static inline uint8_t tram8_pack_gate_target(uint8_t* buf, uint8_t gate, uint8_t state) {
+  if (gate >= TRAM8_NUM_GATES)
+    return 0;
+  buf[0] = TRAM8_SYSEX_START;
+  buf[1] = TRAM8_MANUFACTURER_ID;
+  buf[2] = (state ? TRAM8_CMD_GATE_SET_BASE : TRAM8_CMD_GATE_CLEAR_BASE) | gate;
+  buf[3] = TRAM8_SYSEX_END;
+  return TRAM8_LEN_GATE_TARGET;
+}
+
+static inline uint8_t tram8_pack_dac_coarse_target(uint8_t* buf, uint8_t channel, uint16_t value) {
+  if (channel >= TRAM8_NUM_GATES)
+    return 0;
+  buf[0] = TRAM8_SYSEX_START;
+  buf[1] = TRAM8_MANUFACTURER_ID;
+  buf[2] = TRAM8_CMD_DAC_COARSE_BASE | channel;
+  buf[3] = (uint8_t)((value >> 5) & 0x7F);
+  buf[4] = TRAM8_SYSEX_END;
+  return TRAM8_LEN_DAC_COARSE_TARGET;
+}
+
+static inline uint8_t tram8_pack_dac_full_target(uint8_t* buf, uint8_t channel, uint16_t value) {
+  if (channel >= TRAM8_NUM_GATES)
+    return 0;
+  buf[0] = TRAM8_SYSEX_START;
+  buf[1] = TRAM8_MANUFACTURER_ID;
+  buf[2] = TRAM8_CMD_DAC_FULL_BASE | channel;
+  buf[3] = (uint8_t)((value >> 5) & 0x7F);
+  buf[4] = (uint8_t)(value & 0x1F);
+  buf[5] = TRAM8_SYSEX_END;
+  return TRAM8_LEN_DAC_FULL_TARGET;
 }
 
 static inline int

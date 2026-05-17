@@ -31,6 +31,7 @@ tresult PLUGIN_API Processor::initialize(FUnknown* context) {
 
   engine_.reset();
   openMidiOutput();
+  sendState();
   return kResultOk;
 }
 
@@ -40,7 +41,12 @@ tresult PLUGIN_API Processor::terminate() {
 }
 
 tresult PLUGIN_API Processor::setActive(TBool state) {
+  if (state) {
+    fullStateSynced_ = false;
+    sendState();
+  }
   if (!state) {
+    fullStateSynced_ = false;
     engine_.clearRuntime();
     sendState();
   }
@@ -153,11 +159,14 @@ tresult PLUGIN_API Processor::notify(IMessage* message) {
     if (message->getAttributes()->getInt("index", index) == kResultOk) {
       if (index < 0) {
         midiDest = 0;
+        fullStateSynced_ = false;
         os_log(logger, "MIDI output: none");
       } else {
         ItemCount destCount = MIDIGetNumberOfDestinations();
         if ((ItemCount)index < destCount) {
           midiDest = MIDIGetDestination((ItemCount)index);
+          fullStateSynced_ = false;
+          sendState();
           os_log(logger, "MIDI output: port %lld", index);
         }
       }
@@ -211,39 +220,65 @@ tresult PLUGIN_API Processor::setState(IBStream* state) {
 }
 
 void Processor::sendState() {
-  tram8_form_t form = TRAM8_FORM_GATES;
-  if (engine_.dacChanged() && engine_.hasPitchMode()) {
-    form = TRAM8_FORM_FULL;
-  } else if (engine_.dacChanged()) {
-    form = TRAM8_FORM_COARSE;
+  uint8_t buf[TRAM8_LEN_FULL];
+  uint8_t len = 0;
+  bool sentFullState = false;
+  const uint16_t* dacValues = engine_.dacValues();
+  const int changedGate = engine_.changedGateIndex();
+  const int changedDac = engine_.changedDacIndex();
+  const bool gateChanged = changedGate >= 0;
+  const bool singleDacChanged = changedDac >= 0;
+
+  if (fullStateSynced_ && gateChanged && !engine_.dacChanged()) {
+    uint8_t gateState = (engine_.gateMask() >> changedGate) & 1;
+    len = tram8_pack_gate_target(buf, (uint8_t)changedGate, gateState);
+  } else if (fullStateSynced_ && !engine_.gateChanged() && singleDacChanged) {
+    uint16_t dac12 = dacValues[changedDac] >> 2;
+    if (engine_.dacNeedsFull(changedDac)) {
+      len = tram8_pack_dac_full_target(buf, (uint8_t)changedDac, dac12);
+    } else {
+      len = tram8_pack_dac_coarse_target(buf, (uint8_t)changedDac, dac12);
+    }
   }
 
-  uint16_t dac12[kNumGates];
-  for (int i = 0; i < kNumGates; i++)
-    dac12[i] = engine_.dacValues()[i] >> 2;
+  if (len == 0) {
+    tram8_form_t form = TRAM8_FORM_GATES;
+    if (!fullStateSynced_) {
+      form = engine_.hasPitchMode() ? TRAM8_FORM_FULL : TRAM8_FORM_COARSE;
+    } else if (engine_.dacChanged() && engine_.hasPitchMode()) {
+      form = TRAM8_FORM_FULL;
+    } else if (engine_.dacChanged()) {
+      form = TRAM8_FORM_COARSE;
+    }
 
-  uint8_t buf[TRAM8_LEN_FULL];
-  uint8_t len = tram8_pack(buf, engine_.gateMask(), dac12, form);
+    uint16_t dac12[kNumGates];
+    for (int i = 0; i < kNumGates; i++)
+      dac12[i] = dacValues[i] >> 2;
 
-  static const char* formNames[] = {"gates", "coarse", "full"};
-  os_log(logger,
-         "send [%{public}s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
-         formNames[form],
-         len,
-         engine_.gateMask(),
-         dac12[0],
-         dac12[1],
-         dac12[2],
-         dac12[3],
-         dac12[4],
-         dac12[5],
-         dac12[6],
-         dac12[7]);
+    len = tram8_pack(buf, engine_.gateMask(), dac12, form);
+    sentFullState = form != TRAM8_FORM_GATES;
+
+    static const char* formNames[] = {"gates", "coarse", "full"};
+    os_log(logger,
+           "send [%{public}s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
+           formNames[form],
+           len,
+           engine_.gateMask(),
+           dac12[0],
+           dac12[1],
+           dac12[2],
+           dac12[3],
+           dac12[4],
+           dac12[5],
+           dac12[6],
+           dac12[7]);
+  }
 
   if (!sendBytes(buf, len))
     return;
 
   engine_.markSent();
+  fullStateSynced_ = fullStateSynced_ || sentFullState;
 }
 
 #ifdef __APPLE__

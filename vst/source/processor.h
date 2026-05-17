@@ -35,6 +35,7 @@ class Processor : public Steinberg::Vst::AudioEffect {
 
  private:
   MidiEngine engine_;
+  bool fullStateSynced_ = false;
 
   void sendState();
 

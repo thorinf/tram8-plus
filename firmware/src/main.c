@@ -229,6 +229,31 @@ static void handle_sysex(const uint8_t* buf, uint8_t len) {
   uint16_t dac[TRAM8_NUM_GATES];
   tram8_form_t form;
 
+  if (len >= TRAM8_LEN_GATE_TARGET && buf[0] == TRAM8_SYSEX_START && buf[1] == TRAM8_MANUFACTURER_ID &&
+      buf[len - 1] == TRAM8_SYSEX_END) {
+    uint8_t cmd = buf[2];
+    if (cmd >= TRAM8_CMD_GATE_SET_BASE && cmd < TRAM8_CMD_GATE_SET_BASE + TRAM8_NUM_GATES &&
+        len == TRAM8_LEN_GATE_TARGET) {
+      gate_set(cmd - TRAM8_CMD_GATE_SET_BASE, 1);
+      return;
+    }
+    if (cmd >= TRAM8_CMD_GATE_CLEAR_BASE && cmd < TRAM8_CMD_GATE_CLEAR_BASE + TRAM8_NUM_GATES &&
+        len == TRAM8_LEN_GATE_TARGET) {
+      gate_set(cmd - TRAM8_CMD_GATE_CLEAR_BASE, 0);
+      return;
+    }
+    if (cmd >= TRAM8_CMD_DAC_COARSE_BASE && cmd < TRAM8_CMD_DAC_COARSE_BASE + TRAM8_NUM_GATES &&
+        len == TRAM8_LEN_DAC_COARSE_TARGET) {
+      max5825_write(cmd - TRAM8_CMD_DAC_COARSE_BASE, (uint16_t)(buf[3] & 0x7F) << 5);
+      return;
+    }
+    if (cmd >= TRAM8_CMD_DAC_FULL_BASE && cmd < TRAM8_CMD_DAC_FULL_BASE + TRAM8_NUM_GATES &&
+        len == TRAM8_LEN_DAC_FULL_TARGET) {
+      max5825_write(cmd - TRAM8_CMD_DAC_FULL_BASE, ((uint16_t)(buf[3] & 0x7F) << 5) | (buf[4] & 0x1F));
+      return;
+    }
+  }
+
   if (tram8_parse(buf, len, &gate_mask, dac, &form) != 0)
     return;
 
