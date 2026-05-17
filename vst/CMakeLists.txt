@@ -5,9 +5,21 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION" TRAM8_VERSION)
+string(STRIP "${TRAM8_VERSION}" TRAM8_VERSION)
+if(NOT TRAM8_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+  message(FATAL_ERROR "Invalid VERSION file contents: '${TRAM8_VERSION}' (expected MAJOR.MINOR.PATCH)")
+endif()
+
 project(tram8-bridge
-  VERSION 0.1.0
+  VERSION ${TRAM8_VERSION}
   LANGUAGES CXX OBJCXX
+)
+
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/source/version.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
+  @ONLY
 )
 
 set(CMAKE_CXX_STANDARD 17)
@@ -49,7 +61,6 @@ add_custom_target(generate_ui_html DEPENDS "${UI_HTML_OUTPUT}")
 
 smtg_add_vst3plugin(tram8-bridge
   source/cids.h
-  source/version.h
   source/midi_engine.h
   source/midi_engine.cpp
   source/processor.h

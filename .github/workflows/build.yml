@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AVR toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-avr avr-libc
+
+      - name: Build firmware
+        run: make -C firmware
+
+      - name: Run tests
+        run: make -C firmware/tests test
+
+  vst:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S vst -B vst/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build vst/build --config Release
+
+      - name: Sign (ad-hoc)
+        run: codesign --force --deep -s - vst/build/VST3/Release/tram8-bridge.vst3
