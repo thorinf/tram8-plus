@@ -92,14 +92,18 @@ static inline uint8_t pop_lsb(uint8_t* mask) {
 
 static note_stack_t gate_stacks[NUM_GATES];
 
-static void set_mode(uint8_t mode) {
-  module_mode = mode;
-  handle_midi_message = (mode == MODE_CC) ? handle_cc : handle_velocity;
+static void clear_gate_runtime(void) {
   for (uint8_t i = 0; i < NUM_GATES; ++i) {
     gate_set(i, 0);
     max5825_write(i, 0);
     note_stack_clear(&gate_stacks[i]);
   }
+}
+
+static void set_mode(uint8_t mode) {
+  module_mode = mode;
+  handle_midi_message = (mode == MODE_CC) ? handle_cc : handle_velocity;
+  clear_gate_runtime();
 }
 
 static void velocity_note_on(uint8_t note, uint8_t velocity) {
@@ -371,6 +375,7 @@ static void menu_mode_loop(void) {
     if (learn_button.state == BUTTON_HELD) {
       switch (menu_index) {
         case 0:
+          clear_gate_runtime();
           learn_begin();
           return;
         case 1:
