@@ -33,11 +33,12 @@ jobs:
         run: |
           pip install intelhex
           python tools/firmware-packager.py firmware/build/main.hex -v
+          mv firmware/build/main_firmware.syx firmware/build/tram8-firmware.syx
 
       - uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: firmware/build/main_firmware.syx
+          path: firmware/build/tram8-firmware.syx
 
   vst:
     runs-on: macos-latest

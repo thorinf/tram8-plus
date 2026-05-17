@@ -12,6 +12,10 @@ Custom firmware for the [TRAM8](https://github.com/kay-lpzw/TRAM8) MIDI-to-CV mo
 
 Each gate can be independently configured with a MIDI channel and note filter.
 
+### Install
+
+Download `tram8-firmware.syx` from the [latest release](../../releases/latest), put the module in SysEx mode, and send the file with any MIDI SysEx tool.
+
 ## VST3 Plugin
 
 Optional companion plugin that receives MIDI in the DAW and sends packed SysEx to the hardware via CoreMIDI. Per-gate configuration of channel, note, and DAC mode (velocity, pitch, CC, off).
