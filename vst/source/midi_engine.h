@@ -186,7 +186,34 @@ class MidiEngine {
     return dacChanged();
   }
 
+  bool gateChanged() const { return gateMask_ != prevGateMask_; }
+
   bool dacChanged() const { return memcmp(dacValues_, prevDacValues_, sizeof(dacValues_)) != 0; }
+
+  int changedGateIndex() const {
+    uint8_t changed = gateMask_ ^ prevGateMask_;
+    if (changed == 0 || (changed & (changed - 1)) != 0)
+      return -1;
+    for (int g = 0; g < kNumGates; g++) {
+      if (changed & (1 << g))
+        return g;
+    }
+    return -1;
+  }
+
+  int changedDacIndex() const {
+    int changed = -1;
+    for (int g = 0; g < kNumGates; g++) {
+      if (dacValues_[g] == prevDacValues_[g])
+        continue;
+      if (changed >= 0)
+        return -1;
+      changed = g;
+    }
+    return changed;
+  }
+
+  bool dacNeedsFull(int gate) const { return gate >= 0 && gate < kNumGates && dacMode_[gate] == kDacPitch; }
 
   void markSent() {
     prevGateMask_ = gateMask_;

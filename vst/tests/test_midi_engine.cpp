@@ -376,6 +376,42 @@ static void test_dac_changed() {
   printf("dac_changed passed\n");
 }
 
+static void test_single_change_detection() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, 60);
+  engine.setGateChannel(1, -1);
+  engine.setGateNote(1, 61);
+  engine.markSent();
+
+  engine.noteOn(0, 60, 0.8f);
+  assert(engine.changedGateIndex() == 0);
+  assert(engine.changedDacIndex() == 0);
+
+  engine.markSent();
+  engine.noteOn(0, 61, 0.6f);
+  assert(engine.changedGateIndex() == 1);
+  assert(engine.changedDacIndex() == 1);
+
+  printf("single_change_detection passed\n");
+}
+
+static void test_multi_change_detection() {
+  MidiEngine engine;
+  engine.setGateChannel(0, -1);
+  engine.setGateNote(0, 60);
+  engine.setGateChannel(1, -1);
+  engine.setGateNote(1, 61);
+  engine.markSent();
+
+  engine.noteOn(0, 60, 0.8f);
+  engine.noteOn(0, 61, 0.6f);
+  assert(engine.changedGateIndex() == -1);
+  assert(engine.changedDacIndex() == -1);
+
+  printf("multi_change_detection passed\n");
+}
+
 static void test_has_pitch_mode() {
   MidiEngine engine;
   assert(!engine.hasPitchMode());
@@ -1025,6 +1061,8 @@ int main() {
   test_velocity_cleared_on_gate_config_change();
   test_state_changed();
   test_dac_changed();
+  test_single_change_detection();
+  test_multi_change_detection();
   test_has_pitch_mode();
   test_serialize_deserialize();
   test_reset();

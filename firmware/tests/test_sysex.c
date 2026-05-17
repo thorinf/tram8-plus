@@ -230,6 +230,62 @@ static void test_message_framing(void) {
   printf("message_framing passed\n");
 }
 
+static void test_target_gate_pack(void) {
+  uint8_t buf[24];
+
+  uint8_t len = tram8_pack_gate_target(buf, 3, 1);
+  assert(len == TRAM8_LEN_GATE_TARGET);
+  assert(buf[0] == TRAM8_SYSEX_START);
+  assert(buf[1] == TRAM8_MANUFACTURER_ID);
+  assert(buf[2] == (TRAM8_CMD_GATE_SET_BASE | 3));
+  assert(buf[3] == TRAM8_SYSEX_END);
+
+  len = tram8_pack_gate_target(buf, 6, 0);
+  assert(len == TRAM8_LEN_GATE_TARGET);
+  assert(buf[2] == (TRAM8_CMD_GATE_CLEAR_BASE | 6));
+
+  printf("target_gate_pack passed\n");
+}
+
+static void test_target_dac_coarse_pack(void) {
+  uint8_t buf[24];
+
+  uint8_t len = tram8_pack_dac_coarse_target(buf, 2, 127 << 5);
+  assert(len == TRAM8_LEN_DAC_COARSE_TARGET);
+  assert(buf[0] == TRAM8_SYSEX_START);
+  assert(buf[1] == TRAM8_MANUFACTURER_ID);
+  assert(buf[2] == (TRAM8_CMD_DAC_COARSE_BASE | 2));
+  assert(buf[3] == 127);
+  assert(buf[4] == TRAM8_SYSEX_END);
+
+  printf("target_dac_coarse_pack passed\n");
+}
+
+static void test_target_dac_full_pack(void) {
+  uint8_t buf[24];
+
+  uint8_t len = tram8_pack_dac_full_target(buf, 5, 0x0ABC);
+  assert(len == TRAM8_LEN_DAC_FULL_TARGET);
+  assert(buf[0] == TRAM8_SYSEX_START);
+  assert(buf[1] == TRAM8_MANUFACTURER_ID);
+  assert(buf[2] == (TRAM8_CMD_DAC_FULL_BASE | 5));
+  assert(buf[3] == ((0x0ABC >> 5) & 0x7F));
+  assert(buf[4] == (0x0ABC & 0x1F));
+  assert(buf[5] == TRAM8_SYSEX_END);
+
+  printf("target_dac_full_pack passed\n");
+}
+
+static void test_target_pack_rejects_bad_index(void) {
+  uint8_t buf[24];
+
+  assert(tram8_pack_gate_target(buf, 8, 1) == 0);
+  assert(tram8_pack_dac_coarse_target(buf, 8, 0) == 0);
+  assert(tram8_pack_dac_full_target(buf, 8, 0) == 0);
+
+  printf("target_pack_rejects_bad_index passed\n");
+}
+
 int main(void) {
   printf("Running SysEx protocol tests...\n");
 
@@ -246,6 +302,10 @@ int main(void) {
   test_parse_rejects_short();
   test_parse_rejects_bad_header();
   test_message_framing();
+  test_target_gate_pack();
+  test_target_dac_coarse_pack();
+  test_target_dac_full_pack();
+  test_target_pack_rejects_bad_index();
 
   printf("\nAll SysEx protocol tests passed!\n");
   return 0;
