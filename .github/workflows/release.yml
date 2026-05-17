@@ -106,7 +106,14 @@ jobs:
           section="$(awk -v ver="$version" '
             /^## / {
               if (in_section) exit
-              if ($2 == ver) { in_section=1; next }
+              heading = $0
+              sub(/^##[[:space:]]+/, "", heading)
+              split(heading, parts, /[[:space:]]+/)
+              token = parts[1]
+              sub(/^v/, "", token)
+              sub(/^\[/, "", token)
+              sub(/\]$/, "", token)
+              if (token == ver) { in_section=1; next }
             }
             in_section { print }
           ' CHANGELOG.md)"
@@ -114,10 +121,11 @@ jobs:
             echo "No CHANGELOG.md entry for version $version"
             exit 1
           fi
+          delimiter="CHANGELOG_EOF_${RANDOM}_${RANDOM}"
           {
-            echo "body<<CHANGELOG_EOF"
+            echo "body<<$delimiter"
             printf '%s\n' "$section"
-            echo "CHANGELOG_EOF"
+            echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create release

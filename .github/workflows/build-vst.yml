@@ -6,6 +6,7 @@ on:
     paths:
       - 'vst/**'
       - 'protocol/**'
+      - 'VERSION'
       - '.github/workflows/build-vst.yml'
 
 permissions:
