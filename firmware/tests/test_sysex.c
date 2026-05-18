@@ -216,6 +216,41 @@ static void test_parse_rejects_bad_header(void) {
   printf("parse_rejects_bad_header passed\n");
 }
 
+static void test_parse_rejects_bad_footer(void) {
+  uint8_t buf[24];
+  uint16_t dac_in[8] = {0};
+  uint8_t len = tram8_pack(buf, 0, dac_in, TRAM8_FORM_FULL);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8];
+  tram8_form_t form;
+
+  buf[len - 1] = 0x00;
+  assert(tram8_parse(buf, len, &gate_out, dac_out, &form) == -1);
+
+  printf("parse_rejects_bad_footer passed\n");
+}
+
+static void test_parse_rejects_unsupported_lengths(void) {
+  uint8_t buf[32] = {0};
+  uint16_t dac_in[8] = {0};
+  tram8_pack(buf, 0x5A, dac_in, TRAM8_FORM_FULL);
+
+  uint8_t gate_out;
+  uint16_t dac_out[8];
+  tram8_form_t form;
+
+  for (uint8_t len = TRAM8_LEN_GATES + 1; len < sizeof(buf); len++) {
+    if (len == TRAM8_LEN_COARSE || len == TRAM8_LEN_FULL)
+      continue;
+    buf[len - 1] = TRAM8_SYSEX_END;
+    assert(tram8_parse(buf, len, &gate_out, dac_out, &form) == -1);
+    buf[len - 1] = 0;
+  }
+
+  printf("parse_rejects_unsupported_lengths passed\n");
+}
+
 static void test_message_framing(void) {
   uint8_t buf[24];
   uint16_t dac_in[8] = {0};
@@ -301,6 +336,8 @@ int main(void) {
   test_roundtrip_each_dac();
   test_parse_rejects_short();
   test_parse_rejects_bad_header();
+  test_parse_rejects_bad_footer();
+  test_parse_rejects_unsupported_lengths();
   test_message_framing();
   test_target_gate_pack();
   test_target_dac_coarse_pack();
