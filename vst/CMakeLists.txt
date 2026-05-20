@@ -63,6 +63,7 @@ smtg_add_vst3plugin(tram8-bridge
   source/cids.h
   source/midi_engine.h
   source/midi_engine.cpp
+  source/state_format.h
   source/processor.h
   source/processor.cpp
   source/controller.h

@@ -1,6 +1,7 @@
 #include "processor.h"
 #include "cids.h"
 #include "../../protocol/tram8_sysex.h"
+#include "state_format.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
@@ -182,38 +183,15 @@ tresult PLUGIN_API Processor::getState(IBStream* state) {
     return kResultFalse;
   int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
   engine_.serialize(buf);
-  return state->write(buf, sizeof(buf)) == kResultOk ? kResultOk : kResultFalse;
+  return writeStateWords(state, buf) ? kResultOk : kResultFalse;
 }
 
 tresult PLUGIN_API Processor::setState(IBStream* state) {
   if (!state)
     return kResultFalse;
   int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
-  engine_.serialize(buf);
-
-  for (int i = 0; i < kNumGates; i++) {
-    int32_t ch, note, mode;
-    int32_t dCh = -1, ccN = 1;
-    if (state->read(&ch, sizeof(ch)) != kResultOk)
-      break;
-    if (state->read(&note, sizeof(note)) != kResultOk)
-      break;
-    if (state->read(&mode, sizeof(mode)) != kResultOk)
-      break;
-    if (state->read(&dCh, sizeof(dCh)) != kResultOk) {
-      dCh = -1;
-      ccN = 1;
-    } else if (state->read(&ccN, sizeof(ccN)) != kResultOk) {
-      ccN = 1;
-    }
-
-    int off = i * MidiEngine::kStateWordsPerGate;
-    buf[off + 0] = ch;
-    buf[off + 1] = note;
-    buf[off + 2] = mode;
-    buf[off + 3] = dCh;
-    buf[off + 4] = ccN;
-  }
+  if (!readStateWords(state, buf))
+    return kResultFalse;
 
   engine_.deserialize(buf);
   return kResultOk;
