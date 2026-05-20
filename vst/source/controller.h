@@ -3,6 +3,8 @@
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
 
+#include <mutex>
+
 namespace tram8 {
 
 class PlugView;
@@ -18,7 +20,10 @@ class Controller : public Steinberg::Vst::EditController, public Steinberg::Vst:
   Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream* state) override;
   Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage* message) override;
 
-  void setActiveView(PlugView* view) { activeView = view; }
+  void setActiveView(PlugView* view) {
+    std::lock_guard<std::mutex> lock(activeViewMutex);
+    activeView = view;
+  }
 
   Steinberg::tresult PLUGIN_API getMidiControllerAssignment(Steinberg::int32 busIndex,
                                                             Steinberg::int16 channel,
@@ -32,6 +37,7 @@ class Controller : public Steinberg::Vst::EditController, public Steinberg::Vst:
   REFCOUNT_METHODS(EditController)
 
  private:
+  std::mutex activeViewMutex;
   PlugView* activeView = nullptr;
 };
 

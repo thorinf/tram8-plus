@@ -25,11 +25,33 @@ class PlugView;
 @property(assign) tram8::PlugView* plugView;
 @end
 
+static void EvaluateNativeEvent(WKWebView* webView, NSDictionary* event) {
+  if (!webView || ![NSJSONSerialization isValidJSONObject:event])
+    return;
+
+  NSData* json = [NSJSONSerialization dataWithJSONObject:event options:0 error:nil];
+  if (!json)
+    return;
+
+  NSString* jsonStr = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+  if (!jsonStr)
+    return;
+
+  NSString* js = [NSString stringWithFormat:@"typeof tram8 !== 'undefined' && tram8.handleNativeEvent(%@)", jsonStr];
+  [webView evaluateJavaScript:js completionHandler:nil];
+  [jsonStr release];
+}
+
 @implementation Tram8WebBridge
 
 - (void)userContentController:(WKUserContentController*)uc didReceiveScriptMessage:(WKScriptMessage*)message {
+  if (![message.body isKindOfClass:[NSDictionary class]])
+    return;
+
   NSDictionary* body = message.body;
   NSString* type = body[@"type"];
+  if (![type isKindOfClass:[NSString class]])
+    return;
 
   if ([type isEqualToString:@"ready"]) {
     [self pushMidiPorts];
@@ -134,14 +156,11 @@ class PlugView;
       [ports addObject:[NSString stringWithFormat:@"Port %lu", i]];
     }
   }
-  NSData* json = [NSJSONSerialization dataWithJSONObject:ports options:0 error:nil];
-  NSString* jsonStr = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
-  NSString* js = [NSString stringWithFormat:@"tram8.setMidiPorts(%@)", jsonStr];
-  [_webView evaluateJavaScript:js completionHandler:nil];
-  [jsonStr release];
+  EvaluateNativeEvent(_webView, @{@"type" : @"midiPorts", @"ports" : ports});
 }
 
 - (void)pushState {
+  NSMutableArray* gates = [NSMutableArray arrayWithCapacity:8];
   for (int i = 0; i < 8; i++) {
     double chNorm = _controller->getParamNormalized(tram8::kGateChannelBase + i);
     int chStep = (int)(chNorm * 16 + 0.5);
@@ -161,10 +180,16 @@ class PlugView;
     double ccNorm = _controller->getParamNormalized(tram8::kCcNumBase + i);
     int ccN = (int)(ccNorm * 127 + 0.5);
 
-    NSString* js =
-        [NSString stringWithFormat:@"tram8.setGateState(%d, %d, %d, %d, %d, %d)", i, channel, note, mode, dacCh, ccN];
-    [_webView evaluateJavaScript:js completionHandler:nil];
+    [gates addObject:@{
+      @"gate" : @(i),
+      @"channel" : @(channel),
+      @"note" : @(note),
+      @"mode" : @(mode),
+      @"dacChannel" : @(dacCh),
+      @"ccNum" : @(ccN)
+    }];
   }
+  EvaluateNativeEvent(_webView, @{@"type" : @"state", @"gates" : gates});
 }
 
 @end
@@ -314,21 +339,23 @@ uint32 PLUGIN_API PlugView::release() {
 }
 
 void PlugView::flashMidiInput() {
-  WKWebView* wv = webView;
-  if (wv) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [wv evaluateJavaScript:@"tram8.flashInput()" completionHandler:nil];
-    });
-  }
+  PlugView* self = this;
+  self->addRef();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (WKWebView* wv = self->webView)
+      EvaluateNativeEvent(wv, @{@"type" : @"activity", @"input" : @(YES)});
+    self->release();
+  });
 }
 
 void PlugView::flashMidiOutput() {
-  WKWebView* wv = webView;
-  if (wv) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [wv evaluateJavaScript:@"tram8.flashOutput()" completionHandler:nil];
-    });
-  }
+  PlugView* self = this;
+  self->addRef();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (WKWebView* wv = self->webView)
+      EvaluateNativeEvent(wv, @{@"type" : @"activity", @"output" : @(YES)});
+    self->release();
+  });
 }
 
 } // namespace tram8
