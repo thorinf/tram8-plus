@@ -25,6 +25,11 @@ void learn_exit(void) {
 
   g_learn.active = 0;
 
+  // Cancelling an incomplete session restores the saved map and channel.
+  if (g_learn.gate < NUM_GATES) {
+    midi_mapper_load();
+  }
+
   for (uint8_t i = 0; i < NUM_GATES; ++i) {
     gate_set(i, 0);
   }
