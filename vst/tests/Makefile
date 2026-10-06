@@ -5,7 +5,11 @@ TESTS = test_midi_engine
 NATIVE_TESTS = test_midi_port_processor
 NATIVE_BUILD = ../build/native-tests
 
-.PHONY: all clean test test-native native-sdk
+ifeq ($(shell uname -s),Darwin)
+test: test-midi-port
+endif
+
+.PHONY: all clean test test-native native-sdk test-midi-port
 
 all: $(TESTS)
 
@@ -33,6 +37,11 @@ test-native: $(NATIVE_TESTS)
 test_midi_port_processor: test_midi_port_processor.cpp ../source/processor.cpp ../source/midi_engine.cpp native-sdk
 	$(CXX) $(CXXFLAGS) -DRELEASE=1 -o $@ $(filter %.cpp,$^) -L$(NATIVE_BUILD)/lib/Release \
 		-lsdk -lsdk_hosting -lsdk_common -lbase -lpluginterfaces -framework CoreFoundation
+
+test-midi-port:
+	cmake -S .. -B ../build/tests-build -DSMTG_CREATE_PLUGIN_LINK=OFF -DSMTG_RUN_VST_VALIDATOR=OFF
+	cmake --build ../build/tests-build --target test_midi_port -j2
+	../build/tests-build/tests/test_midi_port
 
 clean:
 	rm -f $(TESTS) $(NATIVE_TESTS)
