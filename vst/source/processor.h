@@ -44,6 +44,8 @@ class Processor : public Steinberg::Vst::AudioEffect {
   MIDIClientRef midiClient = 0;
   MIDIPortRef midiOutPort = 0;
   std::atomic<MIDIEndpointRef> midiDest{0};
+  // Accepted UI selection; output application may lag.
+  std::atomic<MIDIEndpointRef> selectedMidiDest{0};
   std::atomic<int64_t> pendingMidiDest{-1};
   os_log_t logger = nullptr;
 #endif

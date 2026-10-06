@@ -107,6 +107,13 @@ tresult PLUGIN_API Controller::notify(IMessage* message) {
   if (!message)
     return kInvalidArgument;
 
+  if (strcmp(message->getMessageID(), "MIDIPort") == 0) {
+    int64 index = -1;
+    if (activeView && message->getAttributes()->getInt("index", index) == kResultOk)
+      activeView->setMidiPort(index);
+    return kResultOk;
+  }
+
   if (strcmp(message->getMessageID(), "MidiActivity") == 0) {
     if (activeView) {
       int64 val = 0;

@@ -34,6 +34,11 @@ class PlugView;
   if ([type isEqualToString:@"ready"]) {
     [self pushMidiPorts];
     [self pushState];
+    if (auto* msg = _controller->allocateMessage()) {
+      msg->setMessageID("GetMIDIPort");
+      _controller->sendMessage(msg);
+      msg->release();
+    }
     return;
   }
 
@@ -196,6 +201,7 @@ tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
   if (strcmp(type, kPlatformTypeNSView) != 0)
     return kResultFalse;
 
+  static_cast<Controller*>(controller)->setActiveView(this);
   NSView* parentView = (__bridge NSView*)parent;
 
   bridge = [[Tram8WebBridge alloc] init];
@@ -327,6 +333,16 @@ void PlugView::flashMidiOutput() {
   if (wv) {
     dispatch_async(dispatch_get_main_queue(), ^{
       [wv evaluateJavaScript:@"tram8.flashOutput()" completionHandler:nil];
+    });
+  }
+}
+
+void PlugView::setMidiPort(int64 index) {
+  WKWebView* wv = webView;
+  if (wv) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSString* js = [NSString stringWithFormat:@"tram8.setMidiPort(%lld)", index];
+      [wv evaluateJavaScript:js completionHandler:nil];
     });
   }
 }
