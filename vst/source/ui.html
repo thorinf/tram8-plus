@@ -148,7 +148,7 @@ hr { border: none; border-top: 1px solid #333; margin: 8px 16px; }
       <div id="midi-out" class="midi-io-box">O</div>
     </div>
     <span id="midi-port-cell" class="extra-cell" style="color:#999;cursor:pointer">
-      <span id="midi-port-label">(none)</span>
+      <span id="midi-port-label">(...)</span>
     </span>
   </div>
 </header>
@@ -206,6 +206,7 @@ function closePopup() { document.getElementById('popup-root').innerHTML = ''; }
 // --- State ---
 
 let midiPorts = [];
+let selectedMidiPort = null;
 let editing = null;
 
 const tram8 = {
@@ -216,10 +217,13 @@ const tram8 = {
 
   setMidiPorts(ports) {
     midiPorts = ports;
-    if (ports.length > 0) {
-      document.getElementById('midi-port-label').textContent = ports[0];
-      this.post({type:'setMidiPort', index:0});
-    }
+    this.setMidiPort(selectedMidiPort);
+  },
+
+  setMidiPort(index) {
+    selectedMidiPort = index;
+    document.getElementById('midi-port-label').textContent =
+      index === null ? '(...)' : index < 0 ? '(none)' : (midiPorts[index] ?? '(unavailable)');
   },
 
   applyGateState(gate, state) {
@@ -479,8 +483,7 @@ const tram8 = {
     document.getElementById('midi-port-cell').onclick = e => {
       const items = [{label:'(none)', value:-1}];
       midiPorts.forEach((n,i) => items.push({label:n, value:i}));
-      openPopup(e.currentTarget, items, -1, idx => {
-        document.getElementById('midi-port-label').textContent = idx < 0 ? '(none)' : midiPorts[idx];
+      openPopup(e.currentTarget, items, selectedMidiPort, idx => {
         this.post({type:'setMidiPort', index:idx});
       });
     };

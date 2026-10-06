@@ -78,7 +78,9 @@ static void send(id bridge, id body) {
 static void drain() {
   __block bool done = false;
   dispatch_async(dispatch_get_main_queue(), ^{
-    done = true;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done = true;
+    });
   });
   NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:5];
   while (!done && deadline.timeIntervalSinceNow > 0)
@@ -146,8 +148,19 @@ int main() {
     HostMessage activity;
     activity.setMessageID("MidiActivity");
     activity.getAttributes()->setInt("input", 1);
+    HostMessage portReply;
+    portReply.setMessageID("MIDIPort");
+    portReply.getAttributes()->setInt("index", 1);
+    drain();
+    [webView.scripts removeAllObjects];
+    std::thread portWorker([&] { assert(controller->notify(&portReply) == kResultOk); });
+    portWorker.join();
+    drain();
+    assert(webView.scripts.count == 1);
+    assert([webView.scripts[0] isEqualToString:@"tram8.setMidiPort(1)"]);
     [webView.scripts removeAllObjects];
     assert(controller->notify(&activity) == kResultOk);
+    assert(controller->notify(&portReply) == kResultOk);
     assert(view->removed() == kResultOk);
     send(bridge, @{@"type" : @"setNote", @"gate" : @0, @"note" : @0});
     drain();
@@ -168,8 +181,10 @@ int main() {
     assert(replacementWebView.scripts.count == 1);
     [replacementWebView.scripts removeAllObjects];
     std::thread worker([&] {
-      for (int i = 0; i < 100; ++i)
+      for (int i = 0; i < 100; ++i) {
         controller->notify(&activity);
+        controller->notify(&portReply);
+      }
     });
     replacement->release(); // host omitted removed(), racing activity notification
     worker.join();

@@ -170,20 +170,39 @@ tresult PLUGIN_API Processor::notify(IMessage* message) {
     int64 index = -1;
     if (message->getAttributes()->getInt("index", index) == kResultOk) {
       if (index < 0) {
+        selectedMidiDest = 0;
         pendingMidiDest.store(0, std::memory_order_relaxed);
         os_log(logger, "MIDI output: none");
       } else {
         ItemCount destCount = MIDIGetNumberOfDestinations();
         if ((ItemCount)index < destCount) {
-          pendingMidiDest.store(MIDIGetDestination((ItemCount)index), std::memory_order_relaxed);
+          MIDIEndpointRef destination = MIDIGetDestination((ItemCount)index);
+          selectedMidiDest = destination;
+          pendingMidiDest.store(destination, std::memory_order_relaxed);
           os_log(logger, "MIDI output: port %lld", index);
         }
       }
     }
-    return kResultOk;
+  } else if (strcmp(message->getMessageID(), "GetMIDIPort") != 0) {
+    return AudioEffect::notify(message);
   }
 
-  return AudioEffect::notify(message);
+  int64 selectedIndex = -1;
+  MIDIEndpointRef selectedDest = selectedMidiDest.load();
+  ItemCount destCount = MIDIGetNumberOfDestinations();
+  for (ItemCount i = 0; selectedDest && i < destCount; i++) {
+    if (MIDIGetDestination(i) == selectedDest) {
+      selectedIndex = (int64)i;
+      break;
+    }
+  }
+  if (auto* reply = allocateMessage()) {
+    reply->setMessageID("MIDIPort");
+    reply->getAttributes()->setInt("index", selectedIndex);
+    sendMessage(reply);
+    reply->release();
+  }
+  return kResultOk;
 }
 
 tresult PLUGIN_API Processor::getState(IBStream* state) {
@@ -309,6 +328,7 @@ void Processor::openMidiOutput() {
       CFRelease(name);
     }
     if (midiDest == 0) {
+      selectedMidiDest = ep;
       midiDest = ep;
     }
   }
@@ -327,6 +347,7 @@ void Processor::closeMidiOutput() {
     MIDIClientDispose(midiClient);
   midiOutPort = 0;
   midiClient = 0;
+  selectedMidiDest = 0;
   midiDest = 0;
 }
 

@@ -56,6 +56,7 @@ class PlugView : public Steinberg::IPlugView, public Steinberg::IDependent {
   void resizeTo(int width, int height);
   void flashMidiInput();
   void flashMidiOutput();
+  void setMidiPort(Steinberg::int64 index);
 
  private:
   std::atomic<Steinberg::uint32> refCount = 1;
