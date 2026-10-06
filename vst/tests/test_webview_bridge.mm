@@ -105,7 +105,7 @@ int main() {
     assert(view->attached(parent, kPlatformTypeNSView) == kResultOk);
     id bridge = [lastBridge retain];
     TestWebView* webView = [(TestWebView*)parent.subviews.lastObject retain];
-    [bridge performSelector:@selector(pushState)];
+    send(bridge, @{@"type" : @"ready"});
     NSDictionary* state = event(webView.scripts.lastObject);
     assert([state[@"type"] isEqual:@"state"] && [state[@"gates"] count] == kNumGates);
     assert([state[@"gates"][0][@"note"] intValue] == 60);
