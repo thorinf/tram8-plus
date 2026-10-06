@@ -6,6 +6,9 @@
 #include "pluginterfaces/gui/iplugview.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
 
+#include <cmath>
+#include <limits>
+
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
 #import <CoreMIDI/CoreMIDI.h>
@@ -25,11 +28,44 @@ class PlugView;
 @property(assign) tram8::PlugView* plugView;
 @end
 
+static bool ReadInteger(NSDictionary* body, NSString* key, int min, int max, int& result) {
+  id value = body[key];
+  if (![value isKindOfClass:[NSNumber class]] || CFGetTypeID((CFTypeRef)value) == CFBooleanGetTypeID())
+    return false;
+  double number = [value doubleValue];
+  if (!std::isfinite(number) || number < min || number > max || std::trunc(number) != number)
+    return false;
+  result = (int)number;
+  return true;
+}
+
+static void EvaluateNativeEvent(WKWebView* webView, NSDictionary* event) {
+  if (!webView || ![NSJSONSerialization isValidJSONObject:event])
+    return;
+
+  NSData* json = [NSJSONSerialization dataWithJSONObject:event options:0 error:nil];
+  if (!json)
+    return;
+
+  NSString* jsonStr = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+  if (!jsonStr)
+    return;
+
+  NSString* js = [NSString stringWithFormat:@"typeof tram8 !== 'undefined' && tram8.handleNativeEvent(%@)", jsonStr];
+  [webView evaluateJavaScript:js completionHandler:nil];
+  [jsonStr release];
+}
+
 @implementation Tram8WebBridge
 
 - (void)userContentController:(WKUserContentController*)uc didReceiveScriptMessage:(WKScriptMessage*)message {
+  if (!_controller || !_webView || ![message.body isKindOfClass:[NSDictionary class]])
+    return;
+
   NSDictionary* body = message.body;
   NSString* type = body[@"type"];
+  if (![type isKindOfClass:[NSString class]])
+    return;
 
   if ([type isEqualToString:@"ready"]) {
     [self pushMidiPorts];
@@ -43,8 +79,9 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"setChannel"]) {
-    int gate = [body[@"gate"] intValue];
-    int channel = [body[@"channel"] intValue];
+    int gate, channel;
+    if (!ReadInteger(body, @"gate", 0, tram8::kNumGates - 1, gate) || !ReadInteger(body, @"channel", -1, 15, channel))
+      return;
     int step = (channel == -1) ? 0 : (channel + 1);
     double norm = step / 16.0;
     ParamID pid = tram8::kGateChannelBase + gate;
@@ -56,8 +93,9 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"setNote"]) {
-    int gate = [body[@"gate"] intValue];
-    int note = [body[@"note"] intValue];
+    int gate, note;
+    if (!ReadInteger(body, @"gate", 0, tram8::kNumGates - 1, gate) || !ReadInteger(body, @"note", -1, 127, note))
+      return;
     int step = (note == -1) ? 0 : (note + 1);
     double norm = step / 128.0;
     ParamID pid = tram8::kGateNoteBase + gate;
@@ -69,8 +107,10 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"setDacMode"]) {
-    int gate = [body[@"gate"] intValue];
-    int mode = [body[@"mode"] intValue];
+    int gate, mode;
+    if (!ReadInteger(body, @"gate", 0, tram8::kNumGates - 1, gate) ||
+        !ReadInteger(body, @"mode", 0, tram8::kDacModeCount - 1, mode))
+      return;
     double norm = mode / (double)(tram8::kDacModeCount - 1);
     ParamID pid = tram8::kDacModeBase + gate;
     _controller->beginEdit(pid);
@@ -81,8 +121,9 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"setDacChannel"]) {
-    int gate = [body[@"gate"] intValue];
-    int channel = [body[@"channel"] intValue];
+    int gate, channel;
+    if (!ReadInteger(body, @"gate", 0, tram8::kNumGates - 1, gate) || !ReadInteger(body, @"channel", -1, 15, channel))
+      return;
     int step = (channel == -1) ? 0 : (channel + 1);
     double norm = step / 16.0;
     ParamID pid = tram8::kDacChannelBase + gate;
@@ -94,8 +135,9 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"setCcNum"]) {
-    int gate = [body[@"gate"] intValue];
-    int cc = [body[@"cc"] intValue];
+    int gate, cc;
+    if (!ReadInteger(body, @"gate", 0, tram8::kNumGates - 1, gate) || !ReadInteger(body, @"cc", 0, 127, cc))
+      return;
     double norm = cc / 127.0;
     ParamID pid = tram8::kCcNumBase + gate;
     _controller->beginEdit(pid);
@@ -106,7 +148,10 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"setMidiPort"]) {
-    int index = [body[@"index"] intValue];
+    int index;
+    if (!ReadInteger(body, @"index", -1, std::numeric_limits<int>::max(), index) ||
+        (index >= 0 && (ItemCount)index >= MIDIGetNumberOfDestinations()))
+      return;
     if (auto* msg = _controller->allocateMessage()) {
       msg->setMessageID("SetMIDIPort");
       msg->getAttributes()->setInt("index", (Steinberg::int64)index);
@@ -117,7 +162,9 @@ class PlugView;
   }
 
   if ([type isEqualToString:@"resize"]) {
-    int height = [body[@"height"] intValue];
+    int height;
+    if (!ReadInteger(body, @"height", 1, std::numeric_limits<int>::max(), height))
+      return;
     NSLog(@"tram8+: JS resize request height=%d", height);
     if (_plugView)
       _plugView->resizeTo(560, height);
@@ -139,14 +186,11 @@ class PlugView;
       [ports addObject:[NSString stringWithFormat:@"Port %lu", i]];
     }
   }
-  NSData* json = [NSJSONSerialization dataWithJSONObject:ports options:0 error:nil];
-  NSString* jsonStr = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
-  NSString* js = [NSString stringWithFormat:@"tram8.setMidiPorts(%@)", jsonStr];
-  [_webView evaluateJavaScript:js completionHandler:nil];
-  [jsonStr release];
+  EvaluateNativeEvent(_webView, @{@"type" : @"midiPorts", @"ports" : ports});
 }
 
 - (void)pushState {
+  NSMutableArray* gates = [NSMutableArray arrayWithCapacity:8];
   for (int i = 0; i < 8; i++) {
     double chNorm = _controller->getParamNormalized(tram8::kGateChannelBase + i);
     int chStep = (int)(chNorm * 16 + 0.5);
@@ -166,10 +210,16 @@ class PlugView;
     double ccNorm = _controller->getParamNormalized(tram8::kCcNumBase + i);
     int ccN = (int)(ccNorm * 127 + 0.5);
 
-    NSString* js =
-        [NSString stringWithFormat:@"tram8.setGateState(%d, %d, %d, %d, %d, %d)", i, channel, note, mode, dacCh, ccN];
-    [_webView evaluateJavaScript:js completionHandler:nil];
+    [gates addObject:@{
+      @"gate" : @(i),
+      @"channel" : @(channel),
+      @"note" : @(note),
+      @"mode" : @(mode),
+      @"dacChannel" : @(dacCh),
+      @"ccNum" : @(ccN)
+    }];
   }
+  EvaluateNativeEvent(_webView, @{@"type" : @"state", @"gates" : gates});
 }
 
 @end
@@ -178,17 +228,13 @@ class PlugView;
 
 namespace tram8 {
 
-PlugView::PlugView(EditController* ctrl) : controller(ctrl) {}
+PlugView::PlugView(EditController* ctrl) : controller(ctrl) {
+  controller->addRef();
+}
 
 PlugView::~PlugView() {
-  if (webView) {
-    [webView.configuration.userContentController removeScriptMessageHandlerForName:@"tram8"];
-    [webView removeFromSuperview];
-    [webView release];
-    webView = nullptr;
-  }
-  [bridge release];
-  bridge = nullptr;
+  removed();
+  controller->release();
 }
 
 tresult PLUGIN_API PlugView::isPlatformTypeSupported(FIDString type) {
@@ -201,7 +247,10 @@ tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
   if (strcmp(type, kPlatformTypeNSView) != 0)
     return kResultFalse;
 
-  static_cast<Controller*>(controller)->setActiveView(this);
+  if (!parent)
+    return kInvalidArgument;
+  removed();
+
   NSView* parentView = (__bridge NSView*)parent;
 
   bridge = [[Tram8WebBridge alloc] init];
@@ -221,11 +270,15 @@ tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
   [webView loadHTMLString:html baseURL:nil];
 
   [parentView addSubview:webView];
+  static_cast<Controller*>(controller)->setActiveView(this);
   return kResultOk;
 }
 
 tresult PLUGIN_API PlugView::removed() {
-  static_cast<Controller*>(controller)->setActiveView(nullptr);
+  static_cast<Controller*>(controller)->clearActiveView(this);
+  bridge.controller = nullptr;
+  bridge.plugView = nullptr;
+  bridge.webView = nil;
   if (webView) {
     [webView.configuration.userContentController removeScriptMessageHandlerForName:@"tram8"];
     [webView removeFromSuperview];
@@ -311,40 +364,59 @@ uint32 PLUGIN_API PlugView::addRef() {
 }
 
 uint32 PLUGIN_API PlugView::release() {
-  uint32 prev = refCount.fetch_sub(1, std::memory_order_acq_rel);
+  uint32 prev;
+  {
+    // Serialize the final release with Controller::notify's temporary reference.
+    auto* ctrl = static_cast<Controller*>(controller);
+    std::lock_guard<std::mutex> lock(ctrl->activeViewMutex);
+    prev = refCount.fetch_sub(1, std::memory_order_acq_rel);
+    if (prev == 1 && ctrl->activeView == this)
+      ctrl->activeView = nullptr;
+  }
   if (prev == 1) {
-    delete this;
+    if ([NSThread isMainThread])
+      delete this;
+    else {
+      PlugView* self = this;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        delete self;
+      });
+    }
     return 0;
   }
   return prev - 1;
 }
 
 void PlugView::flashMidiInput() {
-  WKWebView* wv = webView;
-  if (wv) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [wv evaluateJavaScript:@"tram8.flashInput()" completionHandler:nil];
-    });
-  }
+  PlugView* self = this;
+  self->addRef();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (WKWebView* wv = self->webView)
+      EvaluateNativeEvent(wv, @{@"type" : @"activity", @"input" : @(YES)});
+    self->release();
+  });
 }
 
 void PlugView::flashMidiOutput() {
-  WKWebView* wv = webView;
-  if (wv) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [wv evaluateJavaScript:@"tram8.flashOutput()" completionHandler:nil];
-    });
-  }
+  PlugView* self = this;
+  self->addRef();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (WKWebView* wv = self->webView)
+      EvaluateNativeEvent(wv, @{@"type" : @"activity", @"output" : @(YES)});
+    self->release();
+  });
 }
 
 void PlugView::setMidiPort(int64 index) {
-  WKWebView* wv = webView;
-  if (wv) {
-    dispatch_async(dispatch_get_main_queue(), ^{
+  PlugView* self = this;
+  self->addRef();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (WKWebView* wv = self->webView) {
       NSString* js = [NSString stringWithFormat:@"tram8.setMidiPort(%lld)", index];
       [wv evaluateJavaScript:js completionHandler:nil];
-    });
-  }
+    }
+    self->release();
+  });
 }
 
 } // namespace tram8

@@ -226,12 +226,44 @@ const tram8 = {
       index === null ? '(...)' : index < 0 ? '(none)' : (midiPorts[index] ?? '(unavailable)');
   },
 
-  setGateState(gate, ch, note, mode, dacCh, ccN) {
-    Object.assign(this.gates[gate], {channel:ch, note, mode,
-      dacChannel: dacCh !== undefined ? dacCh : this.gates[gate].dacChannel,
-      ccNum: ccN !== undefined ? ccN : this.gates[gate].ccNum});
-    this.renderGates();
-    this.renderPanel();
+  applyGateState(gate, state) {
+    if (!Number.isInteger(gate) || gate < 0 || gate >= this.gates.length) return;
+    const current = this.gates[gate];
+    const intIn = (value, fallback, min, max) =>
+      Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+    Object.assign(this.gates[gate], {
+      channel: intIn(state.channel, current.channel, -1, 15),
+      note: intIn(state.note, current.note, -1, 127),
+      mode: intIn(state.mode, current.mode, 0, MODES.length - 1),
+      dacChannel: intIn(state.dacChannel, current.dacChannel, -1, 15),
+      ccNum: intIn(state.ccNum, current.ccNum, 0, 127)
+    });
+  },
+
+  handleNativeEvent(event) {
+    if (!event || typeof event.type !== 'string') return;
+
+    if (event.type === 'midiPorts') {
+      this.setMidiPorts(Array.isArray(event.ports) ? event.ports : []);
+      return;
+    }
+
+    if (event.type === 'state') {
+      if (Array.isArray(event.gates)) {
+        event.gates.forEach(g => {
+          if (!g) return;
+          this.applyGateState(g.gate, g);
+        });
+        this.renderGates();
+        this.renderPanel();
+      }
+      return;
+    }
+
+    if (event.type === 'activity') {
+      if (event.input) this.flashInput();
+      if (event.output) this.flashOutput();
+    }
   },
 
   post(msg) {

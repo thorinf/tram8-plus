@@ -85,6 +85,15 @@ include(cmake/warnings.cmake)
 include(cmake/platform.cmake)
 
 if(APPLE)
+  add_executable(tram8-webview-bridge-test EXCLUDE_FROM_ALL
+    tests/test_webview_bridge.mm source/controller.cpp source/plugview.mm)
+  add_dependencies(tram8-webview-bridge-test generate_ui_html)
+  target_include_directories(tram8-webview-bridge-test PRIVATE source "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_link_libraries(tram8-webview-bridge-test PRIVATE sdk sdk_hosting
+    "-framework Cocoa" "-framework WebKit" "-framework CoreMIDI")
+  target_compile_options(tram8-webview-bridge-test PRIVATE -Wall -Wextra -Wno-unused-parameter -UNDEBUG)
+  set_target_properties(tram8-webview-bridge-test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
   add_executable(test_midi_port EXCLUDE_FROM_ALL
     tests/test_midi_port.cpp
     source/processor.cpp
