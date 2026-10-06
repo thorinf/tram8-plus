@@ -65,6 +65,7 @@ tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement* inputs,
 }
 
 tresult PLUGIN_API Processor::process(ProcessData& data) {
+  engine_.beginCcBlock();
   if (data.inputParameterChanges) {
     int32 numChanged = data.inputParameterChanges->getParameterCount();
     for (int32 idx = 0; idx < numChanged; idx++) {
@@ -101,9 +102,11 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         int gate = id - kCcNumBase;
         int step = (int)(value * 127 + 0.5);
         engine_.setCcNum(gate, (uint8_t)step);
-      } else if (id >= kCcValueBase && id < kCcValueBase + 128) {
-        int cc = id - kCcValueBase;
-        engine_.setCcValue((uint8_t)cc, (uint8_t)(value * 127 + 0.5));
+      } else if (id >= kCcValueBase && id < kCcValueBase + kCcValueCount) {
+        int offset = id - kCcValueBase;
+        int channel = offset / kMidiCcCount;
+        int cc = offset % kMidiCcCount;
+        engine_.setCcValue((int16_t)channel, (uint8_t)cc, (uint8_t)(value * 127 + 0.5), sampleOffset);
       }
     }
   }

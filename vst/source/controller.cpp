@@ -80,14 +80,15 @@ tresult PLUGIN_API Controller::initialize(FUnknown* context) {
     parameters.addParameter(ccParam);
   }
 
-  for (int cc = 0; cc < 128; cc++) {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "CC %d Value", cc);
-    String128 s;
-    Steinberg::String str(buf);
-    str.copyTo16(s, 0, 127);
-    auto* p = parameters.addParameter(s, nullptr, 0, 0, ParameterInfo::kIsHidden, kCcValueBase + cc);
-    (void)p;
+  for (int channel = 0; channel < kMidiChannelCount; channel++) {
+    for (int cc = 0; cc < kMidiCcCount; cc++) {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "Ch %d CC %d Value", channel + 1, cc);
+      String128 s;
+      Steinberg::String str(buf);
+      str.copyTo16(s, 0, 127);
+      parameters.addParameter(s, nullptr, 0, 0, ParameterInfo::kIsHidden, ccValueParamId(channel, cc));
+    }
   }
 
   return kResultOk;
@@ -183,12 +184,13 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
   return kResultOk;
 }
 
-tresult PLUGIN_API Controller::getMidiControllerAssignment(int32 /*busIndex*/,
-                                                           int16 /*channel*/,
+tresult PLUGIN_API Controller::getMidiControllerAssignment(int32 busIndex,
+                                                           int16 channel,
                                                            CtrlNumber midiControllerNumber,
                                                            ParamID& id) {
-  if (midiControllerNumber >= 0 && midiControllerNumber < 128) {
-    id = kCcValueBase + midiControllerNumber;
+  if (busIndex == 0 && channel >= 0 && channel < kMidiChannelCount && midiControllerNumber >= 0 &&
+      midiControllerNumber < kMidiCcCount) {
+    id = ccValueParamId(channel, midiControllerNumber);
     return kResultOk;
   }
   return kResultFalse;
