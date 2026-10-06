@@ -106,12 +106,21 @@ tresult PLUGIN_API Controller::notify(IMessage* message) {
     return kInvalidArgument;
 
   if (strcmp(message->getMessageID(), "MidiActivity") == 0) {
-    if (activeView) {
+    PlugView* view = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(activeViewMutex);
+      view = activeView;
+      if (view)
+        view->addRef();
+    }
+
+    if (view) {
       int64 val = 0;
       if (message->getAttributes()->getInt("input", val) == kResultOk && val)
-        activeView->flashMidiInput();
+        view->flashMidiInput();
       if (message->getAttributes()->getInt("output", val) == kResultOk && val)
-        activeView->flashMidiOutput();
+        view->flashMidiOutput();
+      view->release();
     }
     return kResultOk;
   }
