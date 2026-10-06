@@ -258,13 +258,151 @@ static void test_cc_mode() {
   engine.noteOn(0, 60, 0.8f);
   assert(engine.dacValues()[0] == 0);
 
-  engine.setCcValue(1, 100);
+  engine.setCcValue(0, 1, 100);
   assert(engine.dacValues()[0] == (uint16_t)100 << 7);
 
-  engine.setCcValue(1, 0);
+  engine.setCcValue(0, 1, 0);
   assert(engine.dacValues()[0] == 0);
 
   printf("cc_mode passed\n");
+}
+
+static void test_cc_mixed_channels_and_gate_independence() {
+  MidiEngine engine;
+  for (int g = 0; g < 3; g++) {
+    engine.setGateChannel(g, 4);
+    engine.setGateNote(g, 60);
+    engine.setDacMode(g, kDacCC);
+    engine.setCcNum(g, 7);
+  }
+  engine.setDacChannel(0, 0);
+  engine.setDacChannel(1, kMidiChannelCount - 1);
+  engine.noteOn(4, 60, 1.f);
+  assert(engine.gateMask() == 0x07);
+
+  for (int channel = 0; channel < kMidiChannelCount; channel++)
+    engine.setCcValue(channel, 7, (uint8_t)(10 + channel));
+  assert(engine.dacValues()[0] == 10 << 7);
+  assert(engine.dacValues()[1] == 25 << 7);
+  assert(engine.dacValues()[2] == 25 << 7);
+  assert(engine.gateMask() == 0x07);
+
+  engine.setCcValue(0, 7, 0);
+  assert(engine.dacValues()[0] == 0);
+  assert(engine.dacValues()[1] == 25 << 7);
+  assert(engine.dacValues()[2] == 0);
+
+  engine.setCcValue(1, 8, 127);
+  engine.noteOn(15, 64, 1.f);
+  engine.noteOff(15, 64);
+  assert(engine.dacValues()[0] == 0);
+  assert(engine.dacValues()[1] == 25 << 7);
+  assert(engine.dacValues()[2] == 0);
+  assert(engine.gateMask() == 0x07);
+  engine.noteOff(4, 60);
+  assert(engine.gateMask() == 0);
+
+  printf("cc_mixed_channels_and_gate_independence passed\n");
+}
+
+static void test_cc_config_repopulates_matching_cache() {
+  MidiEngine engine;
+  engine.setCcValue(0, 7, 100);
+  engine.setCcValue(1, 7, 50);
+  engine.setCcValue(0, 11, 30);
+  engine.setCcValue(1, 11, 80);
+  engine.setCcNum(0, 7);
+  engine.setDacChannel(0, 0);
+  engine.setDacMode(0, kDacCC);
+  assert(engine.dacValues()[0] == 100 << 7);
+
+  engine.setDacChannel(0, 1);
+  assert(engine.dacValues()[0] == 50 << 7);
+  engine.setDacChannel(0, 2);
+  assert(engine.dacValues()[0] == 0);
+  engine.setDacChannel(0, -1);
+  assert(engine.dacValues()[0] == 50 << 7);
+
+  engine.setCcNum(0, 11);
+  assert(engine.dacValues()[0] == 80 << 7);
+  engine.setDacChannel(0, 0);
+  assert(engine.dacValues()[0] == 30 << 7);
+  engine.setCcNum(0, 127);
+  assert(engine.dacValues()[0] == 0);
+  engine.setCcValue(0, 127, 127);
+  assert(engine.dacValues()[0] == 127 << 7);
+
+  engine.setDacMode(0, kDacOff);
+  assert(engine.dacValues()[0] == 0);
+  engine.setCcValue(0, 127, 60);
+  engine.setCcValue(1, 127, 90);
+  engine.setDacMode(0, kDacCC);
+  assert(engine.dacValues()[0] == 60 << 7);
+  engine.setDacChannel(0, -1);
+  assert(engine.dacValues()[0] == 90 << 7);
+
+  printf("cc_config_repopulates_matching_cache passed\n");
+}
+
+static void test_cc_any_uses_latest_sample_offset() {
+  MidiEngine engine;
+  engine.setDacMode(0, kDacCC);
+  engine.setCcNum(0, 7);
+  engine.setDacMode(1, kDacCC);
+  engine.setCcNum(1, 7);
+  engine.setDacChannel(1, 1);
+
+  engine.beginCcBlock();
+  engine.setCcValue(15, 7, 100, 10);
+  engine.setCcValue(0, 7, 40, 50);
+  engine.setCcValue(1, 7, 80, 20);
+  assert(engine.dacValues()[0] == 40 << 7);
+  assert(engine.dacValues()[1] == 80 << 7);
+  engine.setDacChannel(0, 15);
+  assert(engine.dacValues()[0] == 100 << 7);
+  engine.setDacChannel(0, -1);
+  assert(engine.dacValues()[0] == 40 << 7);
+
+  engine.beginCcBlock();
+  engine.setCcValue(15, 7, 0, 0);
+  assert(engine.dacValues()[0] == 0);
+  assert(engine.dacValues()[1] == 80 << 7);
+
+  printf("cc_any_uses_latest_sample_offset passed\n");
+}
+
+static void test_cc_runtime_clear_discards_cache() {
+  MidiEngine engine;
+  engine.setDacMode(0, kDacCC);
+  engine.setCcNum(0, 7);
+  engine.setCcValue(0, 7, 100);
+  engine.setCcValue(1, 7, 50);
+  int32_t words[kNumGates * MidiEngine::kStateWordsPerGate];
+  engine.serialize(words);
+
+  engine.clearRuntime();
+  assert(engine.dacValues()[0] == 0);
+  engine.setDacChannel(0, 0);
+  assert(engine.dacValues()[0] == 0);
+  engine.setDacChannel(0, -1);
+  assert(engine.dacValues()[0] == 0);
+
+  engine.setCcValue(1, 7, 80);
+  engine.deserialize(words);
+  engine.setDacChannel(0, 1);
+  assert(engine.dacValues()[0] == 0);
+  engine.setDacChannel(0, -1);
+  assert(engine.dacValues()[0] == 0);
+
+  engine.setCcValue(1, 7, 90);
+  engine.reset();
+  engine.setCcNum(0, 7);
+  engine.setDacMode(0, kDacCC);
+  assert(engine.dacValues()[0] == 0);
+  engine.setDacChannel(0, 1);
+  assert(engine.dacValues()[0] == 0);
+
+  printf("cc_runtime_clear_discards_cache passed\n");
 }
 
 static void test_gate_note_filter() {
@@ -908,7 +1046,7 @@ static void test_config_change_dac_mode_to_cc() {
   assert(engine.dacValues()[0] == 127 << 7);
 
   engine.setDacMode(0, kDacCC);
-  engine.setCcValue(7, 64);
+  engine.setCcValue(0, 7, 64);
 
   engine.noteOn(0, 60, 1.0f);
   assert(engine.dacValues()[0] == (uint16_t)64 << 7);
@@ -925,15 +1063,15 @@ static void test_config_change_cc_num() {
   engine.setCcNum(0, 1);
 
   engine.noteOn(0, 60, 0.8f);
-  engine.setCcValue(1, 100);
+  engine.setCcValue(0, 1, 100);
   assert(engine.dacValues()[0] == (uint16_t)100 << 7);
 
   engine.setCcNum(0, 7);
-  engine.setCcValue(7, 50);
+  engine.setCcValue(0, 7, 50);
 
   assert(engine.dacValues()[0] == (uint16_t)50 << 7);
 
-  engine.setCcValue(1, 127);
+  engine.setCcValue(0, 1, 127);
   assert(engine.dacValues()[0] == (uint16_t)50 << 7);
 
   printf("config_change_cc_num passed\n");
@@ -997,7 +1135,7 @@ static void test_config_sequence_full_workflow() {
 
   engine.setDacMode(0, kDacCC);
   engine.setCcNum(0, 11);
-  engine.setCcValue(11, 80);
+  engine.setCcValue(0, 11, 80);
   engine.noteOn(0, 72, 0.8f);
   assert(engine.dacValues()[0] == (uint16_t)80 << 7);
 
@@ -1104,10 +1242,10 @@ static void test_cc_dac_independent_of_gate() {
   engine.noteOn(1, 64, 0.8f);
   assert(!(engine.gateMask() & 1));
 
-  engine.setCcValue(7, 64);
+  engine.setCcValue(1, 7, 64);
   assert(engine.dacValues()[0] == (uint16_t)64 << 7);
 
-  engine.setCcValue(7, 0);
+  engine.setCcValue(1, 7, 0);
   assert(engine.dacValues()[0] == 0);
 
   printf("cc_dac_independent_of_gate passed\n");
@@ -1243,7 +1381,7 @@ static void test_dac_mode_pitch_to_cc_populates_value() {
   engine.setDacChannel(0, -1);
   engine.setCcNum(0, 7);
 
-  engine.setCcValue(7, 100);
+  engine.setCcValue(0, 7, 100);
 
   engine.noteOn(0, 48, 0.8f);
   uint16_t pitchVal = engine.dacValues()[0];
@@ -1288,14 +1426,14 @@ static void test_cc_updates_without_active_note() {
   engine.setDacChannel(0, -1);
   engine.setCcNum(0, 7);
 
-  engine.setCcValue(7, 64);
+  engine.setCcValue(0, 7, 64);
   assert(engine.dacValues()[0] == (uint16_t)64 << 7);
 
-  engine.setCcValue(7, 100);
+  engine.setCcValue(0, 7, 100);
   assert(engine.dacValues()[0] == (uint16_t)100 << 7);
 
   engine.setCcNum(0, 1);
-  engine.setCcValue(1, 50);
+  engine.setCcValue(0, 1, 50);
   assert(engine.dacValues()[0] == (uint16_t)50 << 7);
 
   printf("cc_updates_without_active_note passed\n");
@@ -1347,6 +1485,15 @@ static void test_out_of_bounds_gate_ignored() {
   engine.setDacChannel(8, 0);
   engine.setCcNum(-1, 7);
   engine.setCcNum(8, 7);
+  engine.setDacChannel(0, -2);
+  engine.setDacChannel(0, kMidiChannelCount);
+  engine.setCcNum(0, kMidiCcCount);
+  engine.setCcValue(-1, 1, 64);
+  engine.setCcValue(kMidiChannelCount, 1, 64);
+  engine.setCcValue(0, kMidiCcCount, 64);
+  engine.setCcValue(0, 1, kMidiCcCount);
+  engine.setDacMode(0, kDacCC);
+  assert(engine.dacValues()[0] == 0);
   engine.clearGateRuntime(-1);
   engine.clearGateRuntime(8);
 
@@ -1460,6 +1607,10 @@ int main() {
   test_pitch_hold_on_note_off();
   test_last_note_priority();
   test_cc_mode();
+  test_cc_mixed_channels_and_gate_independence();
+  test_cc_config_repopulates_matching_cache();
+  test_cc_any_uses_latest_sample_offset();
+  test_cc_runtime_clear_discards_cache();
   test_gate_note_filter();
   test_gate_channel_filter();
   test_dac_independence();
