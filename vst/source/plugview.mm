@@ -70,6 +70,11 @@ static void EvaluateNativeEvent(WKWebView* webView, NSDictionary* event) {
   if ([type isEqualToString:@"ready"]) {
     [self pushMidiPorts];
     [self pushState];
+    if (auto* msg = _controller->allocateMessage()) {
+      msg->setMessageID("GetMIDIPort");
+      _controller->sendMessage(msg);
+      msg->release();
+    }
     return;
   }
 
@@ -398,6 +403,18 @@ void PlugView::flashMidiOutput() {
   dispatch_async(dispatch_get_main_queue(), ^{
     if (WKWebView* wv = self->webView)
       EvaluateNativeEvent(wv, @{@"type" : @"activity", @"output" : @(YES)});
+    self->release();
+  });
+}
+
+void PlugView::setMidiPort(int64 index) {
+  PlugView* self = this;
+  self->addRef();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (WKWebView* wv = self->webView) {
+      NSString* js = [NSString stringWithFormat:@"tram8.setMidiPort(%lld)", index];
+      [wv evaluateJavaScript:js completionHandler:nil];
+    }
     self->release();
   });
 }

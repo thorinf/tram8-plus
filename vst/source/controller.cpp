@@ -105,7 +105,8 @@ tresult PLUGIN_API Controller::notify(IMessage* message) {
   if (!message)
     return kInvalidArgument;
 
-  if (strcmp(message->getMessageID(), "MidiActivity") == 0) {
+  bool portReply = strcmp(message->getMessageID(), "MIDIPort") == 0;
+  if (portReply || strcmp(message->getMessageID(), "MidiActivity") == 0) {
     PlugView* view = nullptr;
     {
       std::lock_guard<std::mutex> lock(activeViewMutex);
@@ -116,10 +117,15 @@ tresult PLUGIN_API Controller::notify(IMessage* message) {
 
     if (view) {
       int64 val = 0;
-      if (message->getAttributes()->getInt("input", val) == kResultOk && val)
-        view->flashMidiInput();
-      if (message->getAttributes()->getInt("output", val) == kResultOk && val)
-        view->flashMidiOutput();
+      if (portReply) {
+        if (message->getAttributes()->getInt("index", val) == kResultOk)
+          view->setMidiPort(val);
+      } else {
+        if (message->getAttributes()->getInt("input", val) == kResultOk && val)
+          view->flashMidiInput();
+        if (message->getAttributes()->getInt("output", val) == kResultOk && val)
+          view->flashMidiOutput();
+      }
       view->release();
     }
     return kResultOk;

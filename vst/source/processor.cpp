@@ -120,6 +120,8 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     }
   }
 
+  engine_.beginBlock();
+
   bool hadInput = false;
   int32 eventCount = data.inputEvents ? data.inputEvents->getEventCount() : 0;
   hadInput = eventCount > 0;
@@ -168,20 +170,39 @@ tresult PLUGIN_API Processor::notify(IMessage* message) {
     int64 index = -1;
     if (message->getAttributes()->getInt("index", index) == kResultOk) {
       if (index < 0) {
+        selectedMidiDest = 0;
         pendingMidiDest.store(0, std::memory_order_relaxed);
         os_log(logger, "MIDI output: none");
       } else {
         ItemCount destCount = MIDIGetNumberOfDestinations();
         if ((ItemCount)index < destCount) {
-          pendingMidiDest.store(MIDIGetDestination((ItemCount)index), std::memory_order_relaxed);
+          MIDIEndpointRef destination = MIDIGetDestination((ItemCount)index);
+          selectedMidiDest = destination;
+          pendingMidiDest.store(destination, std::memory_order_relaxed);
           os_log(logger, "MIDI output: port %lld", index);
         }
       }
     }
-    return kResultOk;
+  } else if (strcmp(message->getMessageID(), "GetMIDIPort") != 0) {
+    return AudioEffect::notify(message);
   }
 
-  return AudioEffect::notify(message);
+  int64 selectedIndex = -1;
+  MIDIEndpointRef selectedDest = selectedMidiDest.load();
+  ItemCount destCount = MIDIGetNumberOfDestinations();
+  for (ItemCount i = 0; selectedDest && i < destCount; i++) {
+    if (MIDIGetDestination(i) == selectedDest) {
+      selectedIndex = (int64)i;
+      break;
+    }
+  }
+  if (auto* reply = allocateMessage()) {
+    reply->setMessageID("MIDIPort");
+    reply->getAttributes()->setInt("index", selectedIndex);
+    sendMessage(reply);
+    reply->release();
+  }
+  return kResultOk;
 }
 
 tresult PLUGIN_API Processor::getState(IBStream* state) {
@@ -212,17 +233,16 @@ void Processor::sendState() {
   uint8_t buf[TRAM8_LEN_FULL];
   uint8_t len = 0;
   bool sentFullState = false;
-  const uint16_t* dacValues = engine_.dacValues();
   const int changedGate = engine_.changedGateIndex();
   const int changedDac = engine_.changedDacIndex();
   const bool gateChanged = changedGate >= 0;
   const bool singleDacChanged = changedDac >= 0;
 
   if (fullStateSynced_ && gateChanged && !engine_.dacChanged()) {
-    uint8_t gateState = (engine_.gateMask() >> changedGate) & 1;
+    uint8_t gateState = (engine_.outputGateMask() >> changedGate) & 1;
     len = tram8_pack_gate_target(buf, (uint8_t)changedGate, gateState);
   } else if (fullStateSynced_ && !engine_.gateChanged() && singleDacChanged) {
-    uint16_t dac12 = dacValues[changedDac] >> 2;
+    uint16_t dac12 = engine_.outputDacValue(changedDac) >> 2;
     if (engine_.dacNeedsFull(changedDac)) {
       len = tram8_pack_dac_full_target(buf, (uint8_t)changedDac, dac12);
     } else {
@@ -242,9 +262,9 @@ void Processor::sendState() {
 
     uint16_t dac12[kNumGates];
     for (int i = 0; i < kNumGates; i++)
-      dac12[i] = dacValues[i] >> 2;
+      dac12[i] = engine_.outputDacValue(i) >> 2;
 
-    len = tram8_pack(buf, engine_.gateMask(), dac12, form);
+    len = tram8_pack(buf, engine_.outputGateMask(), dac12, form);
     sentFullState = form != TRAM8_FORM_GATES;
 
     static const char* formNames[] = {"gates", "coarse", "full"};
@@ -252,7 +272,7 @@ void Processor::sendState() {
            "send [%{public}s %dB] gates=0x%02X dac=[%u %u %u %u %u %u %u %u]",
            formNames[form],
            len,
-           engine_.gateMask(),
+           engine_.outputGateMask(),
            dac12[0],
            dac12[1],
            dac12[2],
@@ -308,6 +328,7 @@ void Processor::openMidiOutput() {
       CFRelease(name);
     }
     if (midiDest == 0) {
+      selectedMidiDest = ep;
       midiDest = ep;
     }
   }
@@ -326,6 +347,7 @@ void Processor::closeMidiOutput() {
     MIDIClientDispose(midiClient);
   midiOutPort = 0;
   midiClient = 0;
+  selectedMidiDest = 0;
   midiDest = 0;
 }
 
