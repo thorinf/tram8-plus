@@ -24,6 +24,11 @@ class Controller : public Steinberg::Vst::EditController, public Steinberg::Vst:
     std::lock_guard<std::mutex> lock(activeViewMutex);
     activeView = view;
   }
+  void clearActiveView(PlugView* view) {
+    std::lock_guard<std::mutex> lock(activeViewMutex);
+    if (activeView == view)
+      activeView = nullptr;
+  }
 
   Steinberg::tresult PLUGIN_API getMidiControllerAssignment(Steinberg::int32 busIndex,
                                                             Steinberg::int16 channel,
@@ -37,6 +42,7 @@ class Controller : public Steinberg::Vst::EditController, public Steinberg::Vst:
   REFCOUNT_METHODS(EditController)
 
  private:
+  friend class PlugView;
   std::mutex activeViewMutex;
   PlugView* activeView = nullptr;
 };
