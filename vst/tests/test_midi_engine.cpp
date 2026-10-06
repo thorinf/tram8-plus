@@ -734,12 +734,12 @@ static void test_pulse_cc_independence() {
   engine.setDacMode(0, kDacCC);
   engine.setDacChannel(0, 1);
   engine.setCcNum(0, 7);
-  engine.setCcValue(7, 32);
+  engine.setCcValue(1, 7, 32);
   engine.markSent();
   engine.beginBlock();
   engine.noteOn(0, 60, 0.25f);
   engine.noteOn(0, 61, 0.5f);
-  engine.setCcValue(7, 95);
+  engine.setCcValue(1, 7, 95);
   engine.noteOff(0, 60);
   engine.noteOff(0, 61);
   uint16_t expected[kNumGates] = {95 << 5, 64 << 5};
@@ -749,7 +749,7 @@ static void test_pulse_cc_independence() {
   assert(engine.changedDacIndex() == 1);
   expected[1] = 0;
   assert_output_frame(engine, 0, expected, TRAM8_FORM_COARSE);
-  engine.setCcValue(7, 50);
+  engine.setCcValue(1, 7, 50);
   assert(engine.outputGateMask() == 0);
   assert(engine.outputDacValue(0) == 50 << 7);
   printf("pulse_cc_independence passed\n");
