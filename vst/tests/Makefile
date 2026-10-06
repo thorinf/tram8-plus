@@ -6,7 +6,11 @@ ifeq ($(shell uname -s),Darwin)
 TESTS += test_webview_bridge
 endif
 
-.PHONY: all clean test test_webview_bridge
+ifeq ($(shell uname -s),Darwin)
+test: test-midi-port
+endif
+
+.PHONY: all clean test test_webview_bridge test-midi-port
 
 all: $(TESTS)
 
@@ -24,6 +28,11 @@ test_midi_engine: test_midi_engine.cpp ../source/midi_engine.cpp
 test_webview_bridge:
 	cmake -S .. -B ../build/webview-tests -DSMTG_CREATE_PLUGIN_LINK=OFF -DSMTG_RUN_VST_VALIDATOR=OFF
 	cmake --build ../build/webview-tests --target tram8-webview-bridge-test -j2
+
+test-midi-port:
+	cmake -S .. -B ../build/tests-build -DSMTG_CREATE_PLUGIN_LINK=OFF -DSMTG_RUN_VST_VALIDATOR=OFF
+	cmake --build ../build/tests-build --target test_midi_port -j2
+	../build/tests-build/tests/test_midi_port
 
 clean:
 	rm -f $(TESTS)
