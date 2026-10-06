@@ -97,11 +97,32 @@ static TestWebView* attach(IPlugView* view, NSView* parent) {
   assert([webView isKindOfClass:[TestWebView class]]);
   [lastBridge setValue:@YES forKey:@"ready"];
   [lastBridge performSelector:@selector(pushState)];
-  assert(webView.scripts.count == kNumGates);
+  assert(webView.scripts.count == kNumGates || webView.scripts.count == 1);
   return webView;
 }
 
+static NSDictionary* nativeEvent(NSString* script) {
+  NSString* prefix = @"typeof tram8 !== 'undefined' && tram8.handleNativeEvent(";
+  assert([script hasPrefix:prefix] && [script hasSuffix:@")"]);
+  NSString* json = [script substringWithRange:NSMakeRange(prefix.length, script.length - prefix.length - 1)];
+  return [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+}
+
 static void expectGate(TestWebView* view, int gate, int channel, int note, int mode, int dacChannel, int cc) {
+  if (view.scripts.count == 1) {
+    NSDictionary* state = nativeEvent(view.scripts[0]);
+    assert([state[@"type"] isEqual:@"state"] && [state[@"gates"] count] == kNumGates);
+    NSDictionary* expected = @{
+      @"gate" : @(gate),
+      @"channel" : @(channel),
+      @"note" : @(note),
+      @"mode" : @(mode),
+      @"dacChannel" : @(dacChannel),
+      @"ccNum" : @(cc)
+    };
+    assert([state[@"gates"][gate] isEqual:expected]);
+    return;
+  }
   NSString* expected = [NSString
       stringWithFormat:@"tram8.setGateState(%d, %d, %d, %d, %d, %d)", gate, channel, note, mode, dacChannel, cc];
   assert(view.scripts.count == kNumGates);
@@ -170,7 +191,7 @@ int main() {
     std::thread worker([&] { static_cast<PlugView*>(view)->update(nullptr, IDependent::kChanged); });
     worker.join();
     drainMainQueue();
-    assert(webView.scripts.count == kNumGates); // evaluateJavaScript asserts main-thread delivery
+    expectGate(webView, 0, -1, -1, kDacVelocity, -1, 0); // evaluateJavaScript asserts main-thread delivery
 
     [webView.scripts removeAllObjects];
     assert(controller->setParamNormalized(kGateNoteBase, 61 / 128.0) == kResultOk);
@@ -204,7 +225,9 @@ int main() {
     assert(controller->notify(&activity) == kResultOk);
     drainMainQueue();
     assert(replacementWebView.scripts.count == 1);
-    assert([replacementWebView.scripts[0] isEqualToString:@"tram8.flashInput()"]);
+    NSString* activityScript = replacementWebView.scripts[0];
+    if (![activityScript isEqualToString:@"tram8.flashInput()"])
+      assert(([nativeEvent(activityScript) isEqual:@{@"type" : @"activity", @"input" : @YES}]));
 
     [replacementWebView.scripts removeAllObjects];
     assert(controller->setParamNormalized(kGateNoteBase, 64 / 128.0) == kResultOk);
