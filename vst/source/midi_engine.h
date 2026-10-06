@@ -1,11 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
 namespace tram8 {
 
 static constexpr int kNumGates = 8;
+static constexpr int kMidiChannelCount = 16;
+static constexpr int kMidiCcCount = 128;
 
 enum DacMode {
   kDacVelocity = 0,
@@ -89,33 +92,43 @@ class MidiEngine {
     dacMode_[gate] = mode;
     noteStacks_[gate].count = 0;
     if (mode == kDacCC)
-      dacValues_[gate] = (uint16_t)ccValues_[ccNum_[gate]] << 7;
+      dacValues_[gate] = ccDacValue(gate);
     else
       dacValues_[gate] = 0;
   }
 
   void setDacChannel(int gate, int8_t channel) {
-    if (gate < 0 || gate >= kNumGates)
+    if (gate < 0 || gate >= kNumGates || channel < -1 || channel >= kMidiChannelCount)
       return;
     if (dacChannel_[gate] == channel)
       return;
     dacChannel_[gate] = channel;
     noteStacks_[gate].count = 0;
-    dacValues_[gate] = 0;
+    dacValues_[gate] = dacMode_[gate] == kDacCC ? ccDacValue(gate) : 0;
   }
 
   void setCcNum(int gate, uint8_t cc) {
-    if (gate < 0 || gate >= kNumGates)
+    if (gate < 0 || gate >= kNumGates || cc >= kMidiCcCount)
       return;
     ccNum_[gate] = cc;
     if (dacMode_[gate] == kDacCC)
-      dacValues_[gate] = (uint16_t)ccValues_[cc] << 7;
+      dacValues_[gate] = ccDacValue(gate);
   }
 
-  void setCcValue(uint8_t cc, uint8_t value) {
-    ccValues_[cc] = value;
+  // Host parameter queues need not be ordered by their CC sample offsets.
+  void beginCcBlock() { std::fill_n(ccSampleOffsets_, kMidiCcCount, -1); }
+
+  void setCcValue(int16_t channel, uint8_t cc, uint8_t value, int32_t sampleOffset = 0) {
+    if (channel < 0 || channel >= kMidiChannelCount || cc >= kMidiCcCount || value >= kMidiCcCount)
+      return;
+    ccValues_[channel][cc] = value;
+    bool newest = sampleOffset >= ccSampleOffsets_[cc];
+    if (newest) {
+      ccAnyValues_[cc] = value;
+      ccSampleOffsets_[cc] = sampleOffset;
+    }
     for (int g = 0; g < kNumGates; g++) {
-      if (dacMode_[g] == kDacCC && ccNum_[g] == cc)
+      if (dacMode_[g] == kDacCC && ccNum_[g] == cc && (dacChannel_[g] == channel || (dacChannel_[g] == -1 && newest)))
         dacValues_[g] = (uint16_t)value << 7;
     }
   }
@@ -242,6 +255,9 @@ class MidiEngine {
     prevGateMask_ = 0;
     memset(dacValues_, 0, sizeof(dacValues_));
     memset(prevDacValues_, 0, sizeof(prevDacValues_));
+    memset(ccValues_, 0, sizeof(ccValues_));
+    memset(ccAnyValues_, 0, sizeof(ccAnyValues_));
+    beginCcBlock();
     for (int i = 0; i < kNumGates; i++) {
       gateStacks_[i].count = 0;
       noteStacks_[i].count = 0;
@@ -257,7 +273,6 @@ class MidiEngine {
       dacChannel_[i] = -1;
       ccNum_[i] = 1;
     }
-    memset(ccValues_, 0, sizeof(ccValues_));
   }
 
   static constexpr int kStateWordsPerGate = 5;
@@ -314,7 +329,9 @@ class MidiEngine {
   uint8_t dacMode_[kNumGates];
   int8_t dacChannel_[kNumGates];
   uint8_t ccNum_[kNumGates];
-  uint8_t ccValues_[128];
+  uint8_t ccValues_[kMidiChannelCount][kMidiCcCount];
+  uint8_t ccAnyValues_[kMidiCcCount];
+  int32_t ccSampleOffsets_[kMidiCcCount];
 
   NoteStack gateStacks_[kNumGates];
   NoteStack noteStacks_[kNumGates];
@@ -322,6 +339,11 @@ class MidiEngine {
   uint16_t dacValues_[kNumGates];
   uint8_t prevGateMask_;
   uint16_t prevDacValues_[kNumGates];
+
+  uint16_t ccDacValue(int gate) const {
+    const uint8_t* values = dacChannel_[gate] == -1 ? ccAnyValues_ : ccValues_[dacChannel_[gate]];
+    return (uint16_t)values[ccNum_[gate]] << 7;
+  }
 
   void updateDac(int g, int16_t note, uint8_t velocity) {
     switch (dacMode_[g]) {
@@ -335,7 +357,7 @@ class MidiEngine {
         break;
       }
       case kDacCC:
-        dacValues_[g] = (uint16_t)ccValues_[ccNum_[g]] << 7;
+        dacValues_[g] = ccDacValue(g);
         break;
       case kDacOff:
         break;
