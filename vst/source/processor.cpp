@@ -43,6 +43,7 @@ tresult PLUGIN_API Processor::terminate() {
 
 tresult PLUGIN_API Processor::setActive(TBool state) {
   if (state) {
+    applyPendingMidiPort();
     fullStateSynced_ = false;
     sendState();
   }
@@ -65,7 +66,10 @@ tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement* inputs,
 }
 
 tresult PLUGIN_API Processor::process(ProcessData& data) {
+  applyPendingMidiPort();
+
   if (data.inputParameterChanges) {
+    engine_.beginCcBlock();
     int32 numChanged = data.inputParameterChanges->getParameterCount();
     for (int32 idx = 0; idx < numChanged; idx++) {
       auto* queue = data.inputParameterChanges->getParameterData(idx);
@@ -101,9 +105,11 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         int gate = id - kCcNumBase;
         int step = (int)(value * 127 + 0.5);
         engine_.setCcNum(gate, (uint8_t)step);
-      } else if (id >= kCcValueBase && id < kCcValueBase + 128) {
-        int cc = id - kCcValueBase;
-        engine_.setCcValue((uint8_t)cc, (uint8_t)(value * 127 + 0.5));
+      } else if (id >= kCcValueBase && id < kCcValueBase + kCcValueCount) {
+        int offset = id - kCcValueBase;
+        int channel = offset / kMidiCcCount;
+        int cc = offset % kMidiCcCount;
+        engine_.setCcValue((int16_t)channel, (uint8_t)cc, (uint8_t)(value * 127 + 0.5), sampleOffset);
       }
     }
   }
@@ -133,6 +139,9 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
   }
 
   bool hadOutput = engine_.stateChanged();
+#ifdef __APPLE__
+  hadOutput = hadOutput || (midiOutPort && midiDest && !fullStateSynced_);
+#endif
   if (hadOutput)
     sendState();
 
@@ -159,15 +168,12 @@ tresult PLUGIN_API Processor::notify(IMessage* message) {
     int64 index = -1;
     if (message->getAttributes()->getInt("index", index) == kResultOk) {
       if (index < 0) {
-        midiDest = 0;
-        fullStateSynced_ = false;
+        pendingMidiDest.store(0, std::memory_order_relaxed);
         os_log(logger, "MIDI output: none");
       } else {
         ItemCount destCount = MIDIGetNumberOfDestinations();
         if ((ItemCount)index < destCount) {
-          midiDest = MIDIGetDestination((ItemCount)index);
-          fullStateSynced_ = false;
-          sendState();
+          pendingMidiDest.store(MIDIGetDestination((ItemCount)index), std::memory_order_relaxed);
           os_log(logger, "MIDI output: port %lld", index);
         }
       }
@@ -198,6 +204,11 @@ tresult PLUGIN_API Processor::setState(IBStream* state) {
 }
 
 void Processor::sendState() {
+#ifdef __APPLE__
+  if (!midiOutPort || !midiDest)
+    return;
+#endif
+
   uint8_t buf[TRAM8_LEN_FULL];
   uint8_t len = 0;
   bool sentFullState = false;
@@ -260,6 +271,15 @@ void Processor::sendState() {
 }
 
 #ifdef __APPLE__
+
+void Processor::applyPendingMidiPort() {
+  // The UI queues endpoints; only processing/lifecycle code touches engine sync state.
+  const int64_t destination = pendingMidiDest.exchange(-1, std::memory_order_relaxed);
+  if (destination >= 0) {
+    midiDest = static_cast<MIDIEndpointRef>(destination);
+    fullStateSynced_ = false;
+  }
+}
 
 void Processor::openMidiOutput() {
   OSStatus status = MIDIClientCreate(CFSTR("tram8+"), nullptr, nullptr, &midiClient);
@@ -324,6 +344,7 @@ bool Processor::sendBytes(const uint8_t* data, uint32_t length) {
 }
 
 #else
+void Processor::applyPendingMidiPort() {}
 void Processor::openMidiOutput() {}
 void Processor::closeMidiOutput() {}
 bool Processor::sendBytes(const uint8_t*, uint32_t) {

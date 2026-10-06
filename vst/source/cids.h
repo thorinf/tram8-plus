@@ -1,5 +1,6 @@
 #pragma once
 
+#include "midi_engine.h"
 #include "pluginterfaces/base/funknown.h"
 #include "pluginterfaces/vst/vsttypes.h"
 
@@ -13,7 +14,13 @@ enum ParamIDs : Steinberg::Vst::ParamID {
   kDacModeBase = 300, // 300-307
   kDacChannelBase = 400, // 400-407
   kCcNumBase = 500, // 500-507
-  kCcValueBase = 600, // 600-727 (one per CC 0-127)
+  kCcValueBase = 600, // Legacy 600-727 retained for MIDI channel 1.
 };
+
+static constexpr int kCcValueCount = kMidiChannelCount * kMidiCcCount;
+
+constexpr Steinberg::Vst::ParamID ccValueParamId(int channel, int cc) {
+  return kCcValueBase + channel * kMidiCcCount + cc;
+}
 
 } // namespace tram8
