@@ -71,7 +71,7 @@ jobs:
         run: cmake -S vst -B vst/build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build vst/build --config Release
+        run: cmake --build vst/build --target tram8-bridge --config Release
 
       - name: Run tests
         run: make -C vst/tests test
