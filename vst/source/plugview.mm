@@ -3,6 +3,7 @@
 #include "controller.h"
 #include "midi_engine.h"
 #include "ui_html.h"
+#include "base/source/updatehandler.h"
 #include "pluginterfaces/gui/iplugview.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
 
@@ -26,6 +27,10 @@ class PlugView;
 @property(assign) EditController* controller;
 @property(assign) WKWebView* webView;
 @property(assign) tram8::PlugView* plugView;
+@property(assign) BOOL ready;
+@property(assign) BOOL statePending;
+- (void)pushState;
+- (void)requestState;
 @end
 
 static bool ReadInteger(NSDictionary* body, NSString* key, int min, int max, int& result) {
@@ -68,6 +73,7 @@ static void EvaluateNativeEvent(WKWebView* webView, NSDictionary* event) {
     return;
 
   if ([type isEqualToString:@"ready"]) {
+    _ready = YES;
     [self pushMidiPorts];
     [self pushState];
     if (auto* msg = _controller->allocateMessage()) {
@@ -190,6 +196,8 @@ static void EvaluateNativeEvent(WKWebView* webView, NSDictionary* event) {
 }
 
 - (void)pushState {
+  if (!_ready || !_controller || !_webView)
+    return;
   NSMutableArray* gates = [NSMutableArray arrayWithCapacity:8];
   for (int i = 0; i < 8; i++) {
     double chNorm = _controller->getParamNormalized(tram8::kGateChannelBase + i);
@@ -222,6 +230,19 @@ static void EvaluateNativeEvent(WKWebView* webView, NSDictionary* event) {
   EvaluateNativeEvent(_webView, @{@"type" : @"state", @"gates" : gates});
 }
 
+- (void)requestState {
+  // Queue the bridge, not the C++ view; removed() invalidates its pointers.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (!_ready || !_controller || _statePending)
+      return;
+    _statePending = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      _statePending = NO;
+      [self pushState];
+    });
+  });
+}
+
 @end
 
 // ─── PlugView implementation ─────────────────────────────────────────────
@@ -230,10 +251,21 @@ namespace tram8 {
 
 PlugView::PlugView(EditController* ctrl) : controller(ctrl) {
   controller->addRef();
+  UpdateHandler::instance();
+  for (int32 i = 0; i < controller->getParameterCount(); i++) {
+    ParameterInfo info;
+    if (controller->getParameterInfo(i, info) == kResultOk && !(info.flags & ParameterInfo::kIsHidden)) {
+      observedParameters.emplace_back(controller->getParameterObject(info.id));
+      observedParameters.back()->addDependent(this);
+    }
+  }
 }
 
 PlugView::~PlugView() {
   removed();
+  for (const auto& parameter : observedParameters)
+    parameter->removeDependent(this);
+  observedParameters.clear();
   controller->release();
 }
 
@@ -276,9 +308,10 @@ tresult PLUGIN_API PlugView::attached(void* parent, FIDString type) {
 
 tresult PLUGIN_API PlugView::removed() {
   static_cast<Controller*>(controller)->clearActiveView(this);
+  bridge.ready = NO;
   bridge.controller = nullptr;
   bridge.plugView = nullptr;
-  bridge.webView = nil;
+  bridge.webView = nullptr;
   if (webView) {
     [webView.configuration.userContentController removeScriptMessageHandlerForName:@"tram8"];
     [webView removeFromSuperview];
@@ -355,6 +388,11 @@ tresult PLUGIN_API PlugView::queryInterface(const TUID iid, void** obj) {
     *obj = static_cast<IPlugView*>(this);
     return kResultOk;
   }
+  if (FUnknownPrivate::iidEqual(iid, IDependent::iid)) {
+    addRef();
+    *obj = static_cast<IDependent*>(this);
+    return kResultOk;
+  }
   *obj = nullptr;
   return kNoInterface;
 }
@@ -385,6 +423,11 @@ uint32 PLUGIN_API PlugView::release() {
     return 0;
   }
   return prev - 1;
+}
+
+void PLUGIN_API PlugView::update(FUnknown* /*changedUnknown*/, int32 message) {
+  if (message == IDependent::kChanged)
+    [bridge requestState];
 }
 
 void PlugView::flashMidiInput() {

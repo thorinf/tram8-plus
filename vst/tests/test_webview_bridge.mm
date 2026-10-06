@@ -78,7 +78,9 @@ static void send(id bridge, id body) {
 static void drain() {
   __block bool done = false;
   dispatch_async(dispatch_get_main_queue(), ^{
-    done = true;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done = true;
+    });
   });
   NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:5];
   while (!done && deadline.timeIntervalSinceNow > 0)
@@ -149,6 +151,7 @@ int main() {
     HostMessage portReply;
     portReply.setMessageID("MIDIPort");
     portReply.getAttributes()->setInt("index", 1);
+    drain();
     [webView.scripts removeAllObjects];
     std::thread portWorker([&] { assert(controller->notify(&portReply) == kResultOk); });
     portWorker.join();
