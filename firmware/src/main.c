@@ -370,6 +370,7 @@ static void play_mode_loop(void) {
 }
 
 static void menu_mode_loop(void) {
+  learn_exit();
   uint8_t menu_index = 0;
   for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
     gate_set(gate, gate == menu_index);
@@ -397,7 +398,7 @@ static void menu_mode_loop(void) {
     if (learn_button.state == BUTTON_HELD) {
       switch (menu_index) {
         case 0:
-          clear_gate_runtime();
+          set_mode(module_mode == MODE_SYSEX ? MODE_VELOCITY : module_mode);
           learn_begin();
           return;
         case 1:
