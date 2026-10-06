@@ -8,6 +8,7 @@
 #include "public.sdk/source/vst/vsteditcontroller.h"
 
 #include <cmath>
+#include <algorithm>
 #include <limits>
 
 #import <Cocoa/Cocoa.h>
@@ -344,10 +345,7 @@ tresult PLUGIN_API PlugView::onSize(ViewRect* newSize) {
 }
 
 void PlugView::resizeTo(int width, int height) {
-  if (height < kMinHeight)
-    height = kMinHeight;
-  if (height > kMaxHeight)
-    height = kMaxHeight;
+  height = std::ranges::clamp(height, kMinHeight, kMaxHeight);
   NSLog(@"tram8+: resizeTo w=%d h=%d (current=%d, plugFrame=%p)", width, height, currentHeight, plugFrame);
   if (height == currentHeight)
     return;
@@ -375,10 +373,7 @@ tresult PLUGIN_API PlugView::checkSizeConstraint(ViewRect* rect) {
   rect->left = 0;
   rect->top = 0;
   rect->right = kWidth;
-  if (rect->bottom < kMinHeight)
-    rect->bottom = kMinHeight;
-  if (rect->bottom > kMaxHeight)
-    rect->bottom = kMaxHeight;
+  rect->bottom = std::ranges::clamp(rect->bottom, (int32)kMinHeight, (int32)kMaxHeight);
   return kResultOk;
 }
 

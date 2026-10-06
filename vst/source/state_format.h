@@ -34,7 +34,10 @@ inline bool streamRemainingBytes(Steinberg::IBStream* stream, Steinberg::int64& 
   return remaining >= 0;
 }
 
-inline bool readLegacyStateWords(Steinberg::IBStream* stream, int32_t firstWord, int wordsPerGate, int32_t* out) {
+inline bool readLegacyStateWords(Steinberg::IBStream* stream,
+                                 int32_t firstWord,
+                                 int wordsPerGate,
+                                 std::span<int32_t, MidiEngine::kStateWordCount> out) {
   for (int gate = 0; gate < kNumGates; gate++) {
     int32_t ch = firstWord;
     if (gate != 0 && !streamReadInt32(stream, ch))
@@ -61,7 +64,7 @@ inline bool readLegacyStateWords(Steinberg::IBStream* stream, int32_t firstWord,
   return true;
 }
 
-inline bool readStateWords(Steinberg::IBStream* stream, int32_t* out) {
+inline bool readStateWords(Steinberg::IBStream* stream, std::span<int32_t, MidiEngine::kStateWordCount> out) {
   Steinberg::int64 remaining = 0;
   bool hasSize = streamRemainingBytes(stream, remaining);
 
@@ -81,8 +84,8 @@ inline bool readStateWords(Steinberg::IBStream* stream, int32_t* out) {
     int32_t version = 0;
     if (!streamReadInt32(stream, version) || version != kStateVersion)
       return false;
-    for (int i = 0; i < kNumGates * MidiEngine::kStateWordsPerGate; i++) {
-      if (!streamReadInt32(stream, out[i]))
+    for (auto& word : out) {
+      if (!streamReadInt32(stream, word))
         return false;
     }
     return true;
@@ -99,11 +102,11 @@ inline bool readStateWords(Steinberg::IBStream* stream, int32_t* out) {
   return readLegacyStateWords(stream, first, MidiEngine::kStateWordsPerGate, out);
 }
 
-inline bool writeStateWords(Steinberg::IBStream* stream, const int32_t* words) {
+inline bool writeStateWords(Steinberg::IBStream* stream, std::span<const int32_t, MidiEngine::kStateWordCount> words) {
   if (!streamWriteInt32(stream, kStateMagic) || !streamWriteInt32(stream, kStateVersion))
     return false;
-  for (int i = 0; i < kNumGates * MidiEngine::kStateWordsPerGate; i++) {
-    if (!streamWriteInt32(stream, words[i]))
+  for (auto word : words) {
+    if (!streamWriteInt32(stream, word))
       return false;
   }
   return true;

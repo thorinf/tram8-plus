@@ -8,6 +8,7 @@
 #include "state_format.h"
 
 #include <cstdio>
+#include <algorithm>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -138,7 +139,7 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
   if (!state)
     return kResultFalse;
 
-  int32_t stateWords[kNumGates * MidiEngine::kStateWordsPerGate];
+  int32_t stateWords[MidiEngine::kStateWordCount];
   if (!readStateWords(state, stateWords))
     return kResultFalse;
 
@@ -150,20 +151,12 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
     int32 dacChVal = stateWords[off + 3];
     int32 ccNumVal = stateWords[off + 4];
 
-    int chStep = chVal + 1;
-    if (chStep < 0)
-      chStep = 0;
-    if (chStep > 16)
-      chStep = 16;
+    auto chStep = std::ranges::clamp(int64_t{chVal} + 1, int64_t{0}, int64_t{16});
     auto* chParam = parameters.getParameter(kGateChannelBase + i);
     if (chParam)
       chParam->setNormalized(chParam->toNormalized(chStep));
 
-    int noteStep = noteVal + 1;
-    if (noteStep < 0)
-      noteStep = 0;
-    if (noteStep > 128)
-      noteStep = 128;
+    auto noteStep = std::ranges::clamp(int64_t{noteVal} + 1, int64_t{0}, int64_t{128});
     auto* noteParam = parameters.getParameter(kGateNoteBase + i);
     if (noteParam)
       noteParam->setNormalized(noteParam->toNormalized(noteStep));
@@ -176,19 +169,12 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
     if (modeParam)
       modeParam->setNormalized(modeParam->toNormalized(modeVal));
 
-    int dacChStep = dacChVal + 1;
-    if (dacChStep < 0)
-      dacChStep = 0;
-    if (dacChStep > 16)
-      dacChStep = 16;
+    auto dacChStep = std::ranges::clamp(int64_t{dacChVal} + 1, int64_t{0}, int64_t{16});
     auto* dacChParam = parameters.getParameter(kDacChannelBase + i);
     if (dacChParam)
       dacChParam->setNormalized(dacChParam->toNormalized(dacChStep));
 
-    if (ccNumVal < 0)
-      ccNumVal = 0;
-    if (ccNumVal > 127)
-      ccNumVal = 127;
+    ccNumVal = std::ranges::clamp(ccNumVal, int32_t{0}, int32_t{127});
     auto* ccParam = parameters.getParameter(kCcNumBase + i);
     if (ccParam)
       ccParam->setNormalized(ccParam->toNormalized(ccNumVal));

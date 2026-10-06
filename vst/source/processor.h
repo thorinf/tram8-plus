@@ -52,7 +52,7 @@ class Processor : public Steinberg::Vst::AudioEffect {
 
   void openMidiOutput();
   void closeMidiOutput();
-  bool sendBytes(const uint8_t* data, uint32_t length);
+  bool sendBytes(std::span<const uint8_t> data);
 };
 
 } // namespace tram8

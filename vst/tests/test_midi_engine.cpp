@@ -2,12 +2,19 @@
 #include "../source/state_format.h"
 #include "../../protocol/tram8_sysex.h"
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <type_traits>
 
 using namespace tram8;
+
+static_assert(
+    std::is_constructible_v<std::span<int32_t, MidiEngine::kStateWordCount>, int32_t (&)[MidiEngine::kStateWordCount]>);
+static_assert(!std::is_constructible_v<std::span<int32_t, MidiEngine::kStateWordCount>,
+                                       int32_t (&)[MidiEngine::kStateWordCount - 1]>);
 
 class TestStream : public Steinberg::IBStream {
  public:
@@ -117,6 +124,22 @@ static void test_note_stack_retrigger() {
   assert(stack.count == 2);
 
   printf("note_stack_retrigger passed\n");
+}
+
+static void test_note_stack_remove_middle_and_missing() {
+  NoteStack stack;
+  stack.remove(0, 60);
+  stack.push(0, 60, 100);
+  stack.push(1, 60, 80);
+  stack.push(0, 64, 90);
+  stack.remove(1, 60);
+  stack.remove(2, 60);
+  assert(stack.count == 2);
+  assert(stack.entries[0].note == 60 && stack.entries[0].velocity == 100);
+  assert(stack.top().note == 64 && stack.top().velocity == 90);
+  stack.remove(0, 64);
+  assert(stack.top().note == 60);
+  printf("note_stack_remove_middle_and_missing passed\n");
 }
 
 static void test_note_stack_overflow() {
@@ -611,6 +634,24 @@ static void test_single_change_detection() {
   assert(engine.changedDacIndex() == 1);
 
   printf("single_change_detection passed\n");
+}
+
+static void test_single_gate_detection_all_bits() {
+  MidiEngine engine;
+  engine.markSent();
+  assert(engine.changedGateIndex() == -1);
+  for (int gate = 0; gate < kNumGates; gate++) {
+    engine.beginBlock();
+    engine.noteOn(0, 60 + gate, 1.f);
+    assert(engine.changedGateIndex() == gate);
+    engine.markSent();
+    engine.beginBlock();
+    engine.noteOff(0, 60 + gate);
+    assert(engine.changedGateIndex() == gate);
+    engine.markSent();
+    assert(engine.changedGateIndex() == -1);
+  }
+  printf("single_gate_detection_all_bits passed\n");
 }
 
 static void test_multi_change_detection() {
@@ -1502,7 +1543,7 @@ static void test_out_of_bounds_gate_ignored() {
 }
 
 static void test_state_format_versioned_roundtrip() {
-  int32_t words[kNumGates * MidiEngine::kStateWordsPerGate];
+  std::array<int32_t, MidiEngine::kStateWordCount> words;
   for (int i = 0; i < kNumGates; i++) {
     int off = i * MidiEngine::kStateWordsPerGate;
     words[off + 0] = i - 1;
@@ -1516,9 +1557,9 @@ static void test_state_format_versioned_roundtrip() {
   assert(writeStateWords(&stream, words));
   stream.rewind();
 
-  int32_t decoded[kNumGates * MidiEngine::kStateWordsPerGate] = {0};
+  std::array<int32_t, MidiEngine::kStateWordCount> decoded{};
   assert(readStateWords(&stream, decoded));
-  assert(memcmp(words, decoded, sizeof(words)) == 0);
+  assert(std::ranges::equal(words, decoded));
 
   printf("state_format_versioned_roundtrip passed\n");
 }
@@ -1599,6 +1640,7 @@ int main() {
   test_note_stack_top_empty();
   test_note_stack_push_pop();
   test_note_stack_retrigger();
+  test_note_stack_remove_middle_and_missing();
   test_note_stack_overflow();
   test_note_stack_channel_isolation();
   test_velocity_mode();
@@ -1621,6 +1663,7 @@ int main() {
   test_state_changed();
   test_dac_changed();
   test_single_change_detection();
+  test_single_gate_detection_all_bits();
   test_multi_change_detection();
   test_same_block_pulse_and_empty_block_release();
   test_normal_block_notes_and_releases();

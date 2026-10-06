@@ -1,5 +1,5 @@
 CXX = c++
-CXXFLAGS = -Wall -Wextra -std=c++17 -g -I../source -I../external/vst3sdk
+CXXFLAGS = -Wall -Wextra -std=c++20 -g -I../source -I../external/vst3sdk
 
 TESTS = test_midi_engine
 ifeq ($(shell uname -s),Darwin)
@@ -30,8 +30,8 @@ endif
 	@node test_midi_ports.js
 	@echo "All tests completed!"
 
-test_midi_engine: test_midi_engine.cpp ../source/midi_engine.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $^
+test_midi_engine: test_midi_engine.cpp ../source/midi_engine.cpp ../source/midi_engine.h ../source/state_format.h ../../protocol/tram8_sysex.h
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
 test_editor_sync:
 	cmake -S .. -B ../build/editor-tests -DSMTG_CREATE_PLUGIN_LINK=OFF -DSMTG_RUN_VST_VALIDATOR=OFF

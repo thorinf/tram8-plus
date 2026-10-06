@@ -4,7 +4,7 @@ ColumnLimit: 120
 BreakBeforeBraces: Attach
 PointerAlignment: Left
 DerivePointerAlignment: false
-Standard: c++17
+Standard: c++20
 AccessModifierOffset: -1
 
 # Function/block formatting
