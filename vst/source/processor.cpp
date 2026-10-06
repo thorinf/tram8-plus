@@ -65,8 +65,8 @@ tresult PLUGIN_API Processor::setBusArrangements(SpeakerArrangement* inputs,
 }
 
 tresult PLUGIN_API Processor::process(ProcessData& data) {
-  engine_.beginCcBlock();
   if (data.inputParameterChanges) {
+    engine_.beginCcBlock();
     int32 numChanged = data.inputParameterChanges->getParameterCount();
     for (int32 idx = 0; idx < numChanged; idx++) {
       auto* queue = data.inputParameterChanges->getParameterData(idx);
