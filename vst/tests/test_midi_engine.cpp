@@ -1,5 +1,6 @@
 #include "../source/midi_engine.h"
 #include "../source/state_format.h"
+#include "../../protocol/tram8_sysex.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
@@ -488,6 +489,241 @@ static void test_multi_change_detection() {
   assert(engine.changedDacIndex() == -1);
 
   printf("multi_change_detection passed\n");
+}
+
+static void assert_output_frame(const MidiEngine& engine,
+                                uint8_t expectedGates,
+                                const uint16_t expectedDac[kNumGates],
+                                tram8_form_t form) {
+  uint16_t dac12[kNumGates];
+  for (int g = 0; g < kNumGates; g++)
+    dac12[g] = engine.outputDacValue(g) >> 2;
+  uint8_t buf[TRAM8_LEN_FULL];
+  uint8_t len = tram8_pack(buf, engine.outputGateMask(), dac12, form);
+  uint8_t gates = 0;
+  uint16_t decoded[kNumGates] = {};
+  tram8_form_t decodedForm;
+  assert(tram8_parse(buf, len, &gates, decoded, &decodedForm) == 0);
+  assert(decodedForm == form);
+  assert(gates == expectedGates);
+  assert(memcmp(decoded, expectedDac, sizeof(decoded)) == 0);
+}
+
+static void test_same_block_pulse_and_empty_block_release() {
+  for (int g = 0; g < kNumGates; g++) {
+    MidiEngine engine;
+    engine.beginBlock();
+    float velocity = (g + 1) / 8.f;
+    uint16_t vel = (uint16_t)(velocity * 127.f + 0.5f);
+    engine.noteOn(0, 60 + g, velocity);
+    engine.noteOff(0, 60 + g);
+    assert(engine.gateMask() == 0);
+    assert(engine.dacValues()[g] == 0);
+    assert(engine.stateChanged());
+    assert(engine.changedGateIndex() == g);
+    assert(engine.changedDacIndex() == g);
+    uint16_t expected[kNumGates] = {};
+    expected[g] = vel << 5;
+    assert_output_frame(engine, 1 << g, expected, TRAM8_FORM_COARSE);
+    assert_output_frame(engine, 1 << g, expected, TRAM8_FORM_FULL);
+
+    engine.markSent();
+    assert(!engine.stateChanged());
+    assert(engine.gateMask() == 0);
+    engine.beginBlock();
+    assert(engine.stateChanged());
+    assert(engine.changedGateIndex() == g);
+    assert(engine.changedDacIndex() == g);
+    expected[g] = 0;
+    assert_output_frame(engine, 0, expected, TRAM8_FORM_COARSE);
+    engine.markSent();
+    engine.beginBlock();
+    assert(!engine.stateChanged());
+  }
+  printf("same_block_pulse_and_empty_block_release passed\n");
+}
+
+static void test_normal_block_notes_and_releases() {
+  MidiEngine engine;
+  engine.setGateNote(0, -1);
+  engine.beginBlock();
+  engine.noteOn(0, 48, 0.25f);
+  assert(engine.outputGateMask() == 1);
+  assert(engine.outputDacValue(0) == 32 << 7);
+  engine.markSent();
+  engine.beginBlock();
+  assert(!engine.stateChanged());
+  assert(engine.gateMask() == 1);
+  engine.noteOn(0, 50, 0.75f);
+  engine.noteOff(0, 50);
+  assert(engine.outputDacValue(0) == 32 << 7);
+  engine.noteOff(0, 48);
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 0);
+  assert(engine.stateChanged());
+  engine.markSent();
+  engine.beginBlock();
+  assert(!engine.stateChanged());
+  printf("normal_block_notes_and_releases passed\n");
+}
+
+static void test_pulse_overlap_and_no_phantom_held_note() {
+  MidiEngine engine;
+  engine.setGateNote(0, -1);
+  engine.beginBlock();
+  engine.noteOn(0, 48, 0.25f);
+  engine.noteOn(0, 50, 0.75f);
+  engine.noteOff(0, 50);
+  engine.noteOff(0, 48);
+  assert(engine.gateMask() == 0);
+  assert(engine.outputDacValue(0) == 32 << 7);
+  engine.markSent();
+  engine.beginBlock();
+  engine.noteOn(0, 52, 0.5f);
+  engine.noteOff(0, 48);
+  assert(engine.gateMask() == 1);
+  assert(engine.outputDacValue(0) == 64 << 7);
+  engine.markSent();
+  engine.beginBlock();
+  engine.noteOff(0, 52);
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 0);
+  printf("pulse_overlap_and_no_phantom_held_note passed\n");
+}
+
+static void test_pulse_cc_independence() {
+  MidiEngine engine;
+  engine.setDacMode(0, kDacCC);
+  engine.setDacChannel(0, 1);
+  engine.setCcNum(0, 7);
+  engine.setCcValue(7, 32);
+  engine.markSent();
+  engine.beginBlock();
+  engine.noteOn(0, 60, 0.25f);
+  engine.noteOn(0, 61, 0.5f);
+  engine.setCcValue(7, 95);
+  engine.noteOff(0, 60);
+  engine.noteOff(0, 61);
+  uint16_t expected[kNumGates] = {95 << 5, 64 << 5};
+  assert_output_frame(engine, 3, expected, TRAM8_FORM_COARSE);
+  engine.markSent();
+  engine.beginBlock();
+  assert(engine.changedDacIndex() == 1);
+  expected[1] = 0;
+  assert_output_frame(engine, 0, expected, TRAM8_FORM_COARSE);
+  engine.setCcValue(7, 50);
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 50 << 7);
+  printf("pulse_cc_independence passed\n");
+}
+
+static void test_pulse_pitch_routing_unchanged() {
+  for (int channel = 0; channel < 2; channel++) {
+    MidiEngine engine;
+    engine.setGateNote(0, 48);
+    engine.setGateChannel(0, 0);
+    engine.setDacMode(0, kDacPitch);
+    engine.setDacChannel(0, channel);
+    engine.noteOn(channel, 36, 0.25f);
+    engine.markSent();
+    engine.beginBlock();
+    engine.noteOn(0, 48, 0.75f);
+    engine.noteOff(0, 48);
+    if (channel == 1)
+      engine.noteOn(1, 40, 0.5f);
+    int pitch = channel == 0 ? 36 : 40;
+    uint16_t expected[kNumGates] = {(uint16_t)(MidiEngine::pitchLookup[pitch] >> 4)};
+    assert_output_frame(engine, 1, expected, TRAM8_FORM_FULL);
+    engine.markSent();
+    engine.beginBlock();
+    assert(engine.outputGateMask() == 0);
+    assert(!engine.dacChanged());
+    assert_output_frame(engine, 0, expected, TRAM8_FORM_FULL);
+  }
+  printf("pulse_pitch_routing_unchanged passed\n");
+}
+
+static void test_pulse_pitch_later_independent_note() {
+  MidiEngine engine;
+  engine.setGateChannel(0, 0);
+  engine.setGateNote(0, 48);
+  engine.setDacMode(0, kDacPitch);
+  engine.setDacChannel(0, -1);
+  engine.beginBlock();
+  engine.noteOn(0, 48, 0.75f);
+  engine.noteOff(0, 48);
+  engine.noteOn(1, 40, 0.5f);
+  assert(engine.gateMask() == 0);
+  assert(engine.outputDacValue(0) == engine.dacValues()[0]);
+  uint16_t expected[kNumGates] = {(uint16_t)(MidiEngine::pitchLookup[40] >> 4)};
+  assert_output_frame(engine, 1, expected, TRAM8_FORM_FULL);
+  engine.markSent();
+  engine.beginBlock();
+  assert(engine.stateChanged());
+  assert(!engine.dacChanged());
+  assert_output_frame(engine, 0, expected, TRAM8_FORM_FULL);
+  printf("pulse_pitch_later_independent_note passed\n");
+}
+
+static void test_block_zero_velocity_note_off() {
+  MidiEngine engine;
+  engine.beginBlock();
+  engine.noteOn(0, 60, 0.f);
+  assert(!engine.stateChanged());
+  assert(engine.outputGateMask() == 0);
+  engine.noteOn(0, 60, 0.5f);
+  engine.noteOn(0, 60, 0.f);
+  assert(engine.gateMask() == 0);
+  assert(engine.outputGateMask() == 1);
+  assert(engine.outputDacValue(0) == 64 << 7);
+  engine.markSent();
+  engine.beginBlock();
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 0);
+  engine.noteOn(0, 60, 0.5f);
+  engine.markSent();
+  engine.beginBlock();
+  engine.noteOn(0, 60, 0.f);
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 0);
+  printf("block_zero_velocity_note_off passed\n");
+}
+
+static void test_block_pulses_merge_retriggers() {
+  MidiEngine engine;
+  engine.beginBlock();
+  engine.noteOn(0, 60, 0.25f);
+  engine.noteOff(0, 60);
+  engine.noteOn(0, 60, 0.75f);
+  engine.noteOff(0, 60);
+  assert(engine.outputGateMask() == 1);
+  assert(engine.outputDacValue(0) == 95 << 7);
+  engine.markSent();
+  engine.beginBlock();
+  engine.noteOn(0, 60, 0.75f);
+  engine.noteOff(0, 60);
+  assert(!engine.stateChanged()); // Adjacent pulses have no transmitted low edge.
+  engine.beginBlock();
+  assert(engine.stateChanged());
+  assert(engine.outputGateMask() == 0);
+  printf("block_pulses_merge_retriggers passed\n");
+}
+
+static void test_runtime_clear_discards_pulse() {
+  MidiEngine engine;
+  engine.beginBlock();
+  engine.noteOn(0, 60, 0.5f);
+  engine.noteOff(0, 60);
+  engine.setGateNote(0, 48);
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 0);
+  engine.noteOn(0, 48, 0.5f);
+  engine.noteOff(0, 48);
+  engine.clearRuntime();
+  assert(engine.outputGateMask() == 0);
+  assert(engine.outputDacValue(0) == 0);
+  assert(!engine.stateChanged());
+  printf("runtime_clear_discards_pulse passed\n");
 }
 
 static void test_has_pitch_mode() {
@@ -1235,6 +1471,15 @@ int main() {
   test_dac_changed();
   test_single_change_detection();
   test_multi_change_detection();
+  test_same_block_pulse_and_empty_block_release();
+  test_normal_block_notes_and_releases();
+  test_pulse_overlap_and_no_phantom_held_note();
+  test_pulse_cc_independence();
+  test_pulse_pitch_later_independent_note();
+  test_pulse_pitch_routing_unchanged();
+  test_block_zero_velocity_note_off();
+  test_block_pulses_merge_retriggers();
+  test_runtime_clear_discards_pulse();
   test_has_pitch_mode();
   test_serialize_deserialize();
   test_reset();

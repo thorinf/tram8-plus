@@ -61,6 +61,12 @@ class MidiEngine {
  public:
   MidiEngine() { reset(); }
 
+  void beginBlock() {
+    // ponytail: same-block and adjacent-block pulses merge; distinct edges need timed output.
+    pulseGateMask_ = 0;
+    pulseDacMask_ = 0;
+  }
+
   void setGateChannel(int gate, int8_t channel) {
     if (gate < 0 || gate >= kNumGates)
       return;
@@ -87,6 +93,7 @@ class MidiEngine {
     if (dacMode_[gate] == mode)
       return;
     dacMode_[gate] = mode;
+    pulseDacMask_ &= ~(1 << gate);
     noteStacks_[gate].count = 0;
     if (mode == kDacCC)
       dacValues_[gate] = (uint16_t)ccValues_[ccNum_[gate]] << 7;
@@ -132,6 +139,8 @@ class MidiEngine {
       bool gateChMatch = (gateChannel_[g] == -1) || (gateChannel_[g] == channel);
       bool gateNoteMatch = (gateNote_[g] == -1) || (gateNote_[g] == note);
       if (gateChMatch && gateNoteMatch) {
+        if (!(gateMask_ & (1 << g)))
+          pulseGateMask_ |= (1 << g);
         gateStacks_[g].push(channel, note, vel);
         gateMask_ |= (1 << g);
         if (dacMode_[g] == kDacVelocity)
@@ -156,6 +165,10 @@ class MidiEngine {
       if (gateChMatch && gateNoteMatch) {
         gateStacks_[g].remove(channel, note);
         if (gateStacks_[g].empty()) {
+          if (dacMode_[g] == kDacVelocity && (gateMask_ & pulseGateMask_ & (1 << g))) {
+            pulseDacMask_ |= (1 << g);
+            pulseDacValues_[g] = dacValues_[g];
+          }
           gateMask_ &= ~(1 << g);
           if (dacMode_[g] == kDacVelocity)
             dacValues_[g] = 0;
@@ -180,18 +193,28 @@ class MidiEngine {
   uint8_t gateMask() const { return gateMask_; }
   const uint16_t* dacValues() const { return dacValues_; }
 
-  bool stateChanged() const {
-    if (gateMask_ != prevGateMask_)
-      return true;
-    return dacChanged();
+  uint8_t outputGateMask() const { return gateMask_ | pulseGateMask_; }
+
+  uint16_t outputDacValue(int gate) const {
+    if (pulseDacMask_ & ~gateMask_ & (1 << gate))
+      return pulseDacValues_[gate];
+    return dacValues_[gate];
   }
 
-  bool gateChanged() const { return gateMask_ != prevGateMask_; }
+  bool stateChanged() const { return gateChanged() || dacChanged(); }
 
-  bool dacChanged() const { return memcmp(dacValues_, prevDacValues_, sizeof(dacValues_)) != 0; }
+  bool gateChanged() const { return outputGateMask() != prevGateMask_; }
+
+  bool dacChanged() const {
+    for (int g = 0; g < kNumGates; g++) {
+      if (outputDacValue(g) != prevDacValues_[g])
+        return true;
+    }
+    return false;
+  }
 
   int changedGateIndex() const {
-    uint8_t changed = gateMask_ ^ prevGateMask_;
+    uint8_t changed = outputGateMask() ^ prevGateMask_;
     if (changed == 0 || (changed & (changed - 1)) != 0)
       return -1;
     for (int g = 0; g < kNumGates; g++) {
@@ -204,7 +227,7 @@ class MidiEngine {
   int changedDacIndex() const {
     int changed = -1;
     for (int g = 0; g < kNumGates; g++) {
-      if (dacValues_[g] == prevDacValues_[g])
+      if (outputDacValue(g) == prevDacValues_[g])
         continue;
       if (changed >= 0)
         return -1;
@@ -216,8 +239,9 @@ class MidiEngine {
   bool dacNeedsFull(int gate) const { return gate >= 0 && gate < kNumGates && dacMode_[gate] == kDacPitch; }
 
   void markSent() {
-    prevGateMask_ = gateMask_;
-    memcpy(prevDacValues_, dacValues_, sizeof(dacValues_));
+    prevGateMask_ = outputGateMask();
+    for (int g = 0; g < kNumGates; g++)
+      prevDacValues_[g] = outputDacValue(g);
   }
 
   bool hasPitchMode() const {
@@ -233,12 +257,17 @@ class MidiEngine {
       return;
     gateStacks_[gate].count = 0;
     gateMask_ &= ~(1 << gate);
+    pulseGateMask_ &= ~(1 << gate);
+    pulseDacMask_ &= ~(1 << gate);
     if (dacMode_[gate] == kDacVelocity)
       dacValues_[gate] = 0;
   }
 
   void clearRuntime() {
     gateMask_ = 0;
+    pulseGateMask_ = 0;
+    pulseDacMask_ = 0;
+    memset(pulseDacValues_, 0, sizeof(pulseDacValues_));
     prevGateMask_ = 0;
     memset(dacValues_, 0, sizeof(dacValues_));
     memset(prevDacValues_, 0, sizeof(prevDacValues_));
@@ -320,6 +349,9 @@ class MidiEngine {
   NoteStack noteStacks_[kNumGates];
   uint8_t gateMask_;
   uint16_t dacValues_[kNumGates];
+  uint8_t pulseGateMask_;
+  uint8_t pulseDacMask_;
+  uint16_t pulseDacValues_[kNumGates];
   uint8_t prevGateMask_;
   uint16_t prevDacValues_[kNumGates];
 
