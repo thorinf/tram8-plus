@@ -1,9 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <vector>
 
 #include "pluginterfaces/base/funknown.h"
+#include "pluginterfaces/base/iupdatehandler.h"
 #include "pluginterfaces/gui/iplugview.h"
+#include "public.sdk/source/vst/vstparameters.h"
 
 #ifdef __APPLE__
 #ifdef __OBJC__
@@ -23,7 +26,7 @@ class EditController;
 
 namespace tram8 {
 
-class PlugView : public Steinberg::IPlugView {
+class PlugView : public Steinberg::IPlugView, public Steinberg::IDependent {
  public:
   PlugView(Steinberg::Vst::EditController* controller);
   virtual ~PlugView();
@@ -48,6 +51,7 @@ class PlugView : public Steinberg::IPlugView {
   Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid, void** obj) override;
   Steinberg::uint32 PLUGIN_API addRef() override;
   Steinberg::uint32 PLUGIN_API release() override;
+  void PLUGIN_API update(Steinberg::FUnknown* changedUnknown, Steinberg::int32 message) override;
 
   void resizeTo(int width, int height);
   void flashMidiInput();
@@ -57,6 +61,7 @@ class PlugView : public Steinberg::IPlugView {
   std::atomic<Steinberg::uint32> refCount = 1;
   Steinberg::IPlugFrame* plugFrame = nullptr;
   Steinberg::Vst::EditController* controller = nullptr;
+  std::vector<Steinberg::IPtr<Steinberg::Vst::Parameter>> observedParameters;
   WKWebView* webView = nullptr;
   Tram8WebBridge* bridge = nullptr;
 

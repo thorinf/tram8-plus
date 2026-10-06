@@ -95,9 +95,7 @@ tresult PLUGIN_API Controller::initialize(FUnknown* context) {
 
 IPlugView* PLUGIN_API Controller::createView(FIDString name) {
   if (strcmp(name, ViewType::kEditor) == 0) {
-    auto* view = new PlugView(this);
-    activeView = view;
-    return view;
+    return new PlugView(this);
   }
   return nullptr;
 }

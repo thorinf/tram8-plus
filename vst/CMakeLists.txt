@@ -83,3 +83,19 @@ target_link_libraries(tram8-bridge
 
 include(cmake/warnings.cmake)
 include(cmake/platform.cmake)
+
+if(APPLE)
+  add_executable(tram8-editor-sync-test EXCLUDE_FROM_ALL
+    tests/test_editor_sync.mm
+    source/controller.cpp
+    source/plugview.mm
+    external/vst3sdk/public.sdk/source/common/memorystream.cpp
+  )
+  add_dependencies(tram8-editor-sync-test generate_ui_html)
+  target_include_directories(tram8-editor-sync-test PRIVATE source "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_link_libraries(tram8-editor-sync-test PRIVATE sdk sdk_hosting
+    "-framework Cocoa" "-framework WebKit" "-framework CoreMIDI")
+  target_compile_options(tram8-editor-sync-test PRIVATE -Wall -Wextra -Wno-unused-parameter -UNDEBUG)
+  set_target_properties(tram8-editor-sync-test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+endif()

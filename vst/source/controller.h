@@ -19,6 +19,10 @@ class Controller : public Steinberg::Vst::EditController, public Steinberg::Vst:
   Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage* message) override;
 
   void setActiveView(PlugView* view) { activeView = view; }
+  void clearActiveView(PlugView* view) {
+    if (activeView == view)
+      activeView = nullptr;
+  }
 
   Steinberg::tresult PLUGIN_API getMidiControllerAssignment(Steinberg::int32 busIndex,
                                                             Steinberg::int16 channel,
