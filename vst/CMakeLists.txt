@@ -83,3 +83,18 @@ target_link_libraries(tram8-bridge
 
 include(cmake/warnings.cmake)
 include(cmake/platform.cmake)
+
+if(APPLE)
+  add_executable(test_midi_port EXCLUDE_FROM_ALL
+    tests/test_midi_port.cpp
+    source/processor.cpp
+    source/midi_engine.cpp
+  )
+  target_include_directories(test_midi_port PRIVATE source)
+  target_link_libraries(test_midi_port PRIVATE sdk sdk_hosting
+    "-framework CoreMIDI" "-framework CoreFoundation")
+  target_compile_definitions(test_midi_port PRIVATE RELEASE=1)
+  target_compile_options(test_midi_port PRIVATE -UNDEBUG)
+  set_target_properties(test_midi_port PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tests")
+endif()

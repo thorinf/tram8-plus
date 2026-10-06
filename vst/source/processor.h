@@ -38,11 +38,13 @@ class Processor : public Steinberg::Vst::AudioEffect {
   bool fullStateSynced_ = false;
 
   void sendState();
+  void applyPendingMidiPort();
 
 #ifdef __APPLE__
   MIDIClientRef midiClient = 0;
   MIDIPortRef midiOutPort = 0;
   std::atomic<MIDIEndpointRef> midiDest{0};
+  std::atomic<int64_t> pendingMidiDest{-1};
   os_log_t logger = nullptr;
 #endif
 
