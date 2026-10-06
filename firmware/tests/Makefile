@@ -6,8 +6,9 @@ TEST_DIR = .
 MIDI_PARSER_SRC = $(SRC_DIR)/midi_parser.c
 UI_SRC = $(SRC_DIR)/ui.c
 NOTE_STACK_SRC = $(SRC_DIR)/note_stack.c
+LEARN_SRC = $(SRC_DIR)/midi_learn.c $(SRC_DIR)/midi_mapper.c
 
-TESTS = test_midi_parser test_button test_sysex test_note_stack
+TESTS = test_midi_parser test_button test_sysex test_note_stack test_learn_modes
 
 .PHONY: all clean test
 
@@ -19,6 +20,7 @@ test: all
 	@./test_button
 	@./test_sysex
 	@./test_note_stack
+	@./test_learn_modes
 	@echo "All tests completed!"
 
 test_midi_parser: test_midi_parser.c $(MIDI_PARSER_SRC)
@@ -32,6 +34,9 @@ test_sysex: test_sysex.c
 
 test_note_stack: test_note_stack.c $(NOTE_STACK_SRC)
 	$(CC) $(CFLAGS) -o $@ $^
+
+test_learn_modes: test_learn_modes.c $(LEARN_SRC) $(MIDI_PARSER_SRC) $(UI_SRC) $(NOTE_STACK_SRC)
+	$(CC) $(CFLAGS) -Istubs -o $@ $^
 
 clean:
 	rm -f $(TESTS)
