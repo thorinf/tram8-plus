@@ -1,5 +1,5 @@
 CXX = c++
-CXXFLAGS = -Wall -Wextra -std=c++17 -g -I../source -I../external/vst3sdk
+CXXFLAGS = -Wall -Wextra -std=c++20 -g -I../source -I../external/vst3sdk
 
 TESTS = test_midi_engine
 ifeq ($(shell uname -s),Darwin)
@@ -30,8 +30,8 @@ endif
 	@node test_midi_ports.js
 	@echo "All tests completed!"
 
-test_midi_engine: test_midi_engine.cpp ../source/midi_engine.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $^
+test_midi_engine: test_midi_engine.cpp ../source/midi_engine.h ../source/state_format.h ../../protocol/tram8_sysex.h
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
 test_editor_sync:
 	cmake -S .. -B ../build/editor-tests -DSMTG_CREATE_PLUGIN_LINK=OFF -DSMTG_RUN_VST_VALIDATOR=OFF
@@ -49,7 +49,7 @@ native-sdk:
 test-native: $(NATIVE_TESTS)
 	@./test_midi_port_processor
 
-test_midi_port_processor: test_midi_port_processor.cpp ../source/processor.cpp ../source/midi_engine.cpp native-sdk
+test_midi_port_processor: test_midi_port_processor.cpp ../source/processor.cpp native-sdk
 	$(CXX) $(CXXFLAGS) -DRELEASE=1 -o $@ $(filter %.cpp,$^) -L$(NATIVE_BUILD)/lib/Release \
 		-lsdk -lsdk_hosting -lsdk_common -lbase -lpluginterfaces -framework CoreFoundation
 

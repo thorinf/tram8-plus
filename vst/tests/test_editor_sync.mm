@@ -12,6 +12,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <limits>
 #include <thread>
 
 using namespace Steinberg;
@@ -168,6 +169,21 @@ int main() {
     assert(controller->setParamNormalized(kGateChannelBase, 2.0) == kResultOk);
     drainMainQueue();
     expectGate(webView, 0, 15, -1, kDacPitch, 15, 100);
+
+    [webView.scripts removeAllObjects];
+    int32_t extremes[MidiEngine::kStateWordCount]{};
+    for (int gate = 0; gate < kNumGates; gate++) {
+      auto fields = std::span{extremes}.subspan(gate * MidiEngine::kStateWordsPerGate, MidiEngine::kStateWordsPerGate);
+      std::ranges::fill(fields, gate % 2 ? std::numeric_limits<int32_t>::max() : std::numeric_limits<int32_t>::min());
+    }
+    MemoryStream extremeState;
+    assert(writeStateWords(&extremeState, extremes));
+    assert(extremeState.seek(0, IBStream::kIBSeekSet, nullptr) == kResultOk);
+    assert(controller->setComponentState(&extremeState) == kResultOk);
+    drainMainQueue();
+    for (int gate = 0; gate < kNumGates; gate++)
+      expectGate(
+          webView, gate, gate % 2 ? 15 : -1, gate % 2 ? 127 : -1, kDacVelocity, gate % 2 ? 15 : -1, gate % 2 ? 127 : 0);
 
     [webView.scripts removeAllObjects];
     int32_t words[kNumGates * MidiEngine::kStateWordsPerGate];

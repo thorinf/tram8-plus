@@ -114,9 +114,9 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     }
   }
 
-  if (data.numOutputs > 0) {
+  if (data.numOutputs > 0 && data.numSamples > 0) {
     for (int32 ch = 0; ch < data.outputs[0].numChannels; ch++) {
-      memset(data.outputs[0].channelBuffers32[ch], 0, sizeof(float) * data.numSamples);
+      std::ranges::fill(std::span{data.outputs[0].channelBuffers32[ch], (size_t)data.numSamples}, 0.f);
     }
   }
 
@@ -208,7 +208,7 @@ tresult PLUGIN_API Processor::notify(IMessage* message) {
 tresult PLUGIN_API Processor::getState(IBStream* state) {
   if (!state)
     return kResultFalse;
-  int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
+  int32_t buf[MidiEngine::kStateWordCount];
   engine_.serialize(buf);
   return writeStateWords(state, buf) ? kResultOk : kResultFalse;
 }
@@ -216,7 +216,7 @@ tresult PLUGIN_API Processor::getState(IBStream* state) {
 tresult PLUGIN_API Processor::setState(IBStream* state) {
   if (!state)
     return kResultFalse;
-  int32_t buf[kNumGates * MidiEngine::kStateWordsPerGate];
+  int32_t buf[MidiEngine::kStateWordCount];
   if (!readStateWords(state, buf))
     return kResultFalse;
 
@@ -261,8 +261,9 @@ void Processor::sendState() {
     }
 
     uint16_t dac12[kNumGates];
-    for (int i = 0; i < kNumGates; i++)
-      dac12[i] = engine_.outputDacValue(i) >> 2;
+    std::ranges::transform(std::views::iota(0, kNumGates), std::begin(dac12), [this](int gate) {
+      return engine_.outputDacValue(gate) >> 2;
+    });
 
     len = tram8_pack(buf, engine_.outputGateMask(), dac12, form);
     sentFullState = form != TRAM8_FORM_GATES;
@@ -283,7 +284,7 @@ void Processor::sendState() {
            dac12[7]);
   }
 
-  if (!sendBytes(buf, len))
+  if (!sendBytes(std::span{buf}.first(len)))
     return;
 
   engine_.markSent();
@@ -351,14 +352,14 @@ void Processor::closeMidiOutput() {
   midiDest = 0;
 }
 
-bool Processor::sendBytes(const uint8_t* data, uint32_t length) {
+bool Processor::sendBytes(std::span<const uint8_t> data) {
   if (!midiOutPort || !midiDest)
     return false;
 
   uint8_t buf[512];
   MIDIPacketList* packetList = (MIDIPacketList*)buf;
   MIDIPacket* packet = MIDIPacketListInit(packetList);
-  packet = MIDIPacketListAdd(packetList, sizeof(buf), packet, 0, length, data);
+  packet = MIDIPacketListAdd(packetList, sizeof(buf), packet, 0, data.size(), data.data());
   if (!packet)
     return false;
 
@@ -369,7 +370,7 @@ bool Processor::sendBytes(const uint8_t* data, uint32_t length) {
 void Processor::applyPendingMidiPort() {}
 void Processor::openMidiOutput() {}
 void Processor::closeMidiOutput() {}
-bool Processor::sendBytes(const uint8_t*, uint32_t) {
+bool Processor::sendBytes(std::span<const uint8_t>) {
   return false;
 }
 #endif

@@ -1,8 +1,11 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cstdint>
-#include <cstring>
+#include <ranges>
+#include <span>
 
 namespace tram8 {
 
@@ -32,22 +35,19 @@ struct NoteStack {
   void push(int16_t channel, int16_t note, uint8_t velocity) {
     remove(channel, note);
     if (count < kMaxNotes) {
-      entries[count].channel = channel;
-      entries[count].note = note;
-      entries[count].velocity = velocity;
+      entries[count] = {.channel = channel, .note = note, .velocity = velocity};
       count++;
     }
   }
 
   void remove(int16_t channel, int16_t note) {
-    for (int i = 0; i < count; i++) {
-      if (entries[i].channel == channel && entries[i].note == note) {
-        for (int j = i; j < count - 1; j++)
-          entries[j] = entries[j + 1];
-        count--;
-        return;
-      }
-    }
+    auto held = std::span{entries}.first(count);
+    auto found = std::ranges::find_if(
+        held, [=](const NoteEntry& entry) { return entry.channel == channel && entry.note == note; });
+    if (found == held.end())
+      return;
+    std::ranges::move(found + 1, held.end(), found);
+    count--;
   }
 
   bool empty() const { return count == 0; }
@@ -123,7 +123,7 @@ class MidiEngine {
   }
 
   // Host parameter queues need not be ordered by their CC sample offsets.
-  void beginCcBlock() { std::fill_n(ccSampleOffsets_, kMidiCcCount, -1); }
+  void beginCcBlock() { std::ranges::fill(ccSampleOffsets_, -1); }
 
   void setCcValue(int16_t channel, uint8_t cc, uint8_t value, int32_t sampleOffset = 0) {
     if (channel < 0 || channel >= kMidiChannelCount || cc >= kMidiCcCount || value >= kMidiCcCount)
@@ -204,7 +204,7 @@ class MidiEngine {
   }
 
   uint8_t gateMask() const { return gateMask_; }
-  const uint16_t* dacValues() const { return dacValues_; }
+  std::span<const uint16_t, kNumGates> dacValues() const { return dacValues_; }
 
   uint8_t outputGateMask() const { return gateMask_ | pulseGateMask_; }
 
@@ -219,22 +219,15 @@ class MidiEngine {
   bool gateChanged() const { return outputGateMask() != prevGateMask_; }
 
   bool dacChanged() const {
-    for (int g = 0; g < kNumGates; g++) {
-      if (outputDacValue(g) != prevDacValues_[g])
-        return true;
-    }
-    return false;
+    return std::ranges::any_of(std::views::iota(0, kNumGates),
+                               [this](int gate) { return outputDacValue(gate) != prevDacValues_[gate]; });
   }
 
   int changedGateIndex() const {
     uint8_t changed = outputGateMask() ^ prevGateMask_;
-    if (changed == 0 || (changed & (changed - 1)) != 0)
+    if (!std::has_single_bit(changed))
       return -1;
-    for (int g = 0; g < kNumGates; g++) {
-      if (changed & (1 << g))
-        return g;
-    }
-    return -1;
+    return std::countr_zero(changed);
   }
 
   int changedDacIndex() const {
@@ -253,17 +246,11 @@ class MidiEngine {
 
   void markSent() {
     prevGateMask_ = outputGateMask();
-    for (int g = 0; g < kNumGates; g++)
-      prevDacValues_[g] = outputDacValue(g);
+    std::ranges::transform(
+        std::views::iota(0, kNumGates), std::begin(prevDacValues_), [this](int gate) { return outputDacValue(gate); });
   }
 
-  bool hasPitchMode() const {
-    for (int g = 0; g < kNumGates; g++) {
-      if (dacMode_[g] == kDacPitch)
-        return true;
-    }
-    return false;
-  }
+  bool hasPitchMode() const { return std::ranges::find(dacMode_, kDacPitch) != std::end(dacMode_); }
 
   void clearGateRuntime(int gate) {
     if (gate < 0 || gate >= kNumGates)
@@ -280,12 +267,13 @@ class MidiEngine {
     gateMask_ = 0;
     pulseGateMask_ = 0;
     pulseDacMask_ = 0;
-    memset(pulseDacValues_, 0, sizeof(pulseDacValues_));
+    std::ranges::fill(pulseDacValues_, 0);
     prevGateMask_ = 0;
-    memset(dacValues_, 0, sizeof(dacValues_));
-    memset(prevDacValues_, 0, sizeof(prevDacValues_));
-    memset(ccValues_, 0, sizeof(ccValues_));
-    memset(ccAnyValues_, 0, sizeof(ccAnyValues_));
+    std::ranges::fill(dacValues_, 0);
+    std::ranges::fill(prevDacValues_, 0);
+    for (auto& channelValues : ccValues_)
+      std::ranges::fill(channelValues, 0);
+    std::ranges::fill(ccAnyValues_, 0);
     beginCcBlock();
     for (int i = 0; i < kNumGates; i++) {
       gateStacks_[i].count = 0;
@@ -305,43 +293,34 @@ class MidiEngine {
   }
 
   static constexpr int kStateWordsPerGate = 5;
+  static constexpr int kStateWordCount = kNumGates * kStateWordsPerGate;
 
-  void serialize(int32_t* out) const {
+  void serialize(std::span<int32_t, kStateWordCount> out) const {
     for (int i = 0; i < kNumGates; i++) {
-      *out++ = gateChannel_[i];
-      *out++ = gateNote_[i];
-      *out++ = dacMode_[i];
-      *out++ = dacChannel_[i];
-      *out++ = ccNum_[i];
+      auto gate = out.subspan(i * kStateWordsPerGate, kStateWordsPerGate);
+      gate[0] = gateChannel_[i];
+      gate[1] = gateNote_[i];
+      gate[2] = dacMode_[i];
+      gate[3] = dacChannel_[i];
+      gate[4] = ccNum_[i];
     }
   }
 
-  void deserialize(const int32_t* in) {
+  void deserialize(std::span<const int32_t, kStateWordCount> in) {
     clearRuntime();
     for (int i = 0; i < kNumGates; i++) {
-      int32_t ch = *in++;
-      int32_t note = *in++;
-      int32_t mode = *in++;
-      int32_t dCh = *in++;
-      int32_t ccN = *in++;
-      if (ch < -1)
-        ch = -1;
-      else if (ch > 15)
-        ch = 15;
-      if (note < -1)
-        note = -1;
-      else if (note > 127)
-        note = 127;
+      auto gate = in.subspan(i * kStateWordsPerGate, kStateWordsPerGate);
+      int32_t ch = gate[0];
+      int32_t note = gate[1];
+      int32_t mode = gate[2];
+      int32_t dCh = gate[3];
+      int32_t ccN = gate[4];
+      ch = std::ranges::clamp(ch, int32_t{-1}, int32_t{kMidiChannelCount - 1});
+      note = std::ranges::clamp(note, int32_t{-1}, int32_t{127});
       if (mode < 0 || mode >= kDacModeCount)
         mode = kDacVelocity;
-      if (dCh < -1)
-        dCh = -1;
-      else if (dCh > 15)
-        dCh = 15;
-      if (ccN < 0)
-        ccN = 0;
-      else if (ccN > 127)
-        ccN = 127;
+      dCh = std::ranges::clamp(dCh, int32_t{-1}, int32_t{kMidiChannelCount - 1});
+      ccN = std::ranges::clamp(ccN, int32_t{0}, int32_t{kMidiCcCount - 1});
       gateChannel_[i] = (int8_t)ch;
       gateNote_[i] = (int16_t)note;
       dacMode_[i] = (uint8_t)mode;
@@ -350,7 +329,15 @@ class MidiEngine {
     }
   }
 
-  static const uint16_t pitchLookup[61];
+  static constexpr auto pitchLookup = std::to_array<uint16_t>({
+      0x0000, 0x0440, 0x0880, 0x0CD0, 0x1110, 0x1550, 0x19A0, 0x1DE0, 0x2220, 0x2660, 0x2AA0, 0x2EF0, 0x3330,
+      0x3770, 0x3BC0, 0x4000, 0x4440, 0x4880, 0x4CC0, 0x5110, 0x5550, 0x5990, 0x5DE0, 0x6220, 0x6660, 0x6AA0,
+      0x6EE0, 0x7330, 0x7770, 0x7BB0, 0x8000, 0x8440, 0x8880, 0x8CC0, 0x9100, 0x9550, 0x9990, 0x9DD0, 0xA220,
+      0xA660, 0xAAA0, 0xAEE0, 0xB320, 0xB770, 0xBBB0, 0xBFF0, 0xC440, 0xC880, 0xCCC0, 0xD100, 0xD550, 0xD990,
+      0xDDD0, 0xE210, 0xE660, 0xEAA0, 0xEEE0, 0xF320, 0xF760, 0xFBB0, 0xFFF0,
+  });
+  static_assert(pitchLookup.size() == 61);
+  static_assert(std::ranges::is_sorted(pitchLookup));
 
  private:
   int8_t gateChannel_[kNumGates];
@@ -373,18 +360,15 @@ class MidiEngine {
   uint16_t prevDacValues_[kNumGates];
 
   uint16_t ccDacValue(int gate) const {
-    const uint8_t* values = dacChannel_[gate] == -1 ? ccAnyValues_ : ccValues_[dacChannel_[gate]];
+    std::span<const uint8_t, kMidiCcCount> values =
+        dacChannel_[gate] == -1 ? std::span{ccAnyValues_} : std::span{ccValues_[dacChannel_[gate]]};
     return (uint16_t)values[ccNum_[gate]] << 7;
   }
 
   void updateDac(int g, int16_t note, uint8_t velocity) {
     switch (dacMode_[g]) {
       case kDacPitch: {
-        int n = note;
-        if (n < 0)
-          n = 0;
-        if (n > 60)
-          n = 60;
+        int n = std::ranges::clamp(note, int16_t{0}, int16_t{60});
         dacValues_[g] = (pitchLookup[n] >> 2) & 0x3FFC;
         break;
       }

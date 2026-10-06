@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14.0)
+cmake_minimum_required(VERSION 3.25.0)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15 CACHE STRING "")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -22,8 +22,12 @@ configure_file(
   @ONLY
 )
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_OBJCXX_STANDARD 20)
+set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+set(CMAKE_OBJCXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Allow building with CommandLineTools (no full Xcode required)
@@ -62,7 +66,6 @@ add_custom_target(generate_ui_html DEPENDS "${UI_HTML_OUTPUT}")
 smtg_add_vst3plugin(tram8-bridge
   source/cids.h
   source/midi_engine.h
-  source/midi_engine.cpp
   source/state_format.h
   source/processor.h
   source/processor.cpp
@@ -110,7 +113,6 @@ if(APPLE)
   add_executable(test_midi_port EXCLUDE_FROM_ALL
     tests/test_midi_port.cpp
     source/processor.cpp
-    source/midi_engine.cpp
   )
   target_include_directories(test_midi_port PRIVATE source)
   target_link_libraries(test_midi_port PRIVATE sdk sdk_hosting

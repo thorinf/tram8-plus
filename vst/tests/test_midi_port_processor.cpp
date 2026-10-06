@@ -131,6 +131,26 @@ int main() {
   assert(noPorts.connect(&reply) == kResultOk);
   query(noPorts, reply, -1);
   assert(sends.empty());
+
+  float left[] = {3.f, 1.f, -1.f, 4.f, 5.f, 7.f};
+  float right[] = {3.f, -1.f, 2.f, -4.f, 5.f, 7.f};
+  float* channels[] = {left + 1, right + 1};
+  AudioBusBuffers output{};
+  output.numChannels = 2;
+  output.channelBuffers32 = channels;
+  ProcessData data{};
+  data.numOutputs = 1;
+  data.outputs = &output;
+  data.numSamples = 4;
+  assert(noPorts.process(data) == kResultOk);
+  for (auto buffer : {std::span{left}, std::span{right}}) {
+    assert(buffer.front() == 3.f && buffer.back() == 7.f);
+    assert(std::ranges::all_of(buffer.subspan(1, 4), [](float sample) { return sample == 0.f; }));
+  }
+  data.numSamples = 0;
+  output.channelBuffers32 = nullptr;
+  assert(noPorts.process(data) == kResultOk);
+  assert(sends.empty());
   assert(noPorts.terminate() == kResultOk);
-  puts("Processor MIDI port query and output preservation regressions passed");
+  puts("Processor MIDI port query, output preservation and audio clearing regressions passed");
 }
