@@ -114,9 +114,9 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
     }
   }
 
-  if (data.numOutputs > 0) {
+  if (data.numOutputs > 0 && data.numSamples > 0) {
     for (int32 ch = 0; ch < data.outputs[0].numChannels; ch++) {
-      memset(data.outputs[0].channelBuffers32[ch], 0, sizeof(float) * data.numSamples);
+      std::ranges::fill(std::span{data.outputs[0].channelBuffers32[ch], (size_t)data.numSamples}, 0.f);
     }
   }
 
@@ -261,8 +261,9 @@ void Processor::sendState() {
     }
 
     uint16_t dac12[kNumGates];
-    for (int i = 0; i < kNumGates; i++)
-      dac12[i] = engine_.outputDacValue(i) >> 2;
+    std::ranges::transform(std::views::iota(0, kNumGates), std::begin(dac12), [this](int gate) {
+      return engine_.outputDacValue(gate) >> 2;
+    });
 
     len = tram8_pack(buf, engine_.outputGateMask(), dac12, form);
     sentFullState = form != TRAM8_FORM_GATES;

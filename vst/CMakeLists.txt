@@ -66,7 +66,6 @@ add_custom_target(generate_ui_html DEPENDS "${UI_HTML_OUTPUT}")
 smtg_add_vst3plugin(tram8-bridge
   source/cids.h
   source/midi_engine.h
-  source/midi_engine.cpp
   source/state_format.h
   source/processor.h
   source/processor.cpp
@@ -114,7 +113,6 @@ if(APPLE)
   add_executable(test_midi_port EXCLUDE_FROM_ALL
     tests/test_midi_port.cpp
     source/processor.cpp
-    source/midi_engine.cpp
   )
   target_include_directories(test_midi_port PRIVATE source)
   target_link_libraries(test_midi_port PRIVATE sdk sdk_hosting

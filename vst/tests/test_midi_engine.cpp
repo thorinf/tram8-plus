@@ -230,6 +230,21 @@ static void test_pitch_mode() {
   printf("pitch_mode passed\n");
 }
 
+static void test_pitch_table_and_bounds() {
+  static_assert(MidiEngine::pitchLookup.front() == 0x0000);
+  static_assert(MidiEngine::pitchLookup[30] == 0x8000);
+  static_assert(MidiEngine::pitchLookup.back() == 0xFFF0);
+  MidiEngine engine;
+  engine.setDacMode(0, kDacPitch);
+  for (int note = -1; note <= 61; note++) {
+    engine.noteOn(0, (int16_t)note, 1.f);
+    int index = std::ranges::clamp(note, 0, 60);
+    assert(engine.dacValues()[0] == ((MidiEngine::pitchLookup[index] >> 2) & 0x3FFC));
+    engine.noteOff(0, (int16_t)note);
+  }
+  printf("pitch_table_and_bounds passed\n");
+}
+
 static void test_pitch_hold_on_note_off() {
   MidiEngine engine;
   engine.setGateChannel(0, -1);
@@ -1646,6 +1661,7 @@ int main() {
   test_velocity_mode();
   test_velocity_zero_as_note_off();
   test_pitch_mode();
+  test_pitch_table_and_bounds();
   test_pitch_hold_on_note_off();
   test_last_note_priority();
   test_cc_mode();

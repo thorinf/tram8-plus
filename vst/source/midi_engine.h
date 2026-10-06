@@ -1,8 +1,10 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstdint>
+#include <ranges>
 #include <span>
 
 namespace tram8 {
@@ -217,11 +219,8 @@ class MidiEngine {
   bool gateChanged() const { return outputGateMask() != prevGateMask_; }
 
   bool dacChanged() const {
-    for (int g = 0; g < kNumGates; g++) {
-      if (outputDacValue(g) != prevDacValues_[g])
-        return true;
-    }
-    return false;
+    return std::ranges::any_of(std::views::iota(0, kNumGates),
+                               [this](int gate) { return outputDacValue(gate) != prevDacValues_[gate]; });
   }
 
   int changedGateIndex() const {
@@ -247,8 +246,8 @@ class MidiEngine {
 
   void markSent() {
     prevGateMask_ = outputGateMask();
-    for (int g = 0; g < kNumGates; g++)
-      prevDacValues_[g] = outputDacValue(g);
+    std::ranges::transform(
+        std::views::iota(0, kNumGates), std::begin(prevDacValues_), [this](int gate) { return outputDacValue(gate); });
   }
 
   bool hasPitchMode() const { return std::ranges::find(dacMode_, kDacPitch) != std::end(dacMode_); }
@@ -330,7 +329,15 @@ class MidiEngine {
     }
   }
 
-  static const uint16_t pitchLookup[61];
+  static constexpr auto pitchLookup = std::to_array<uint16_t>({
+      0x0000, 0x0440, 0x0880, 0x0CD0, 0x1110, 0x1550, 0x19A0, 0x1DE0, 0x2220, 0x2660, 0x2AA0, 0x2EF0, 0x3330,
+      0x3770, 0x3BC0, 0x4000, 0x4440, 0x4880, 0x4CC0, 0x5110, 0x5550, 0x5990, 0x5DE0, 0x6220, 0x6660, 0x6AA0,
+      0x6EE0, 0x7330, 0x7770, 0x7BB0, 0x8000, 0x8440, 0x8880, 0x8CC0, 0x9100, 0x9550, 0x9990, 0x9DD0, 0xA220,
+      0xA660, 0xAAA0, 0xAEE0, 0xB320, 0xB770, 0xBBB0, 0xBFF0, 0xC440, 0xC880, 0xCCC0, 0xD100, 0xD550, 0xD990,
+      0xDDD0, 0xE210, 0xE660, 0xEAA0, 0xEEE0, 0xF320, 0xF760, 0xFBB0, 0xFFF0,
+  });
+  static_assert(pitchLookup.size() == 61);
+  static_assert(std::ranges::is_sorted(pitchLookup));
 
  private:
   int8_t gateChannel_[kNumGates];
@@ -353,7 +360,8 @@ class MidiEngine {
   uint16_t prevDacValues_[kNumGates];
 
   uint16_t ccDacValue(int gate) const {
-    const uint8_t* values = dacChannel_[gate] == -1 ? ccAnyValues_ : ccValues_[dacChannel_[gate]];
+    std::span<const uint8_t, kMidiCcCount> values =
+        dacChannel_[gate] == -1 ? std::span{ccAnyValues_} : std::span{ccValues_[dacChannel_[gate]]};
     return (uint16_t)values[ccNum_[gate]] << 7;
   }
 

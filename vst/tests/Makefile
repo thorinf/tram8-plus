@@ -30,7 +30,7 @@ endif
 	@node test_midi_ports.js
 	@echo "All tests completed!"
 
-test_midi_engine: test_midi_engine.cpp ../source/midi_engine.cpp ../source/midi_engine.h ../source/state_format.h ../../protocol/tram8_sysex.h
+test_midi_engine: test_midi_engine.cpp ../source/midi_engine.h ../source/state_format.h ../../protocol/tram8_sysex.h
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
 test_editor_sync:
@@ -49,7 +49,7 @@ native-sdk:
 test-native: $(NATIVE_TESTS)
 	@./test_midi_port_processor
 
-test_midi_port_processor: test_midi_port_processor.cpp ../source/processor.cpp ../source/midi_engine.cpp native-sdk
+test_midi_port_processor: test_midi_port_processor.cpp ../source/processor.cpp native-sdk
 	$(CXX) $(CXXFLAGS) -DRELEASE=1 -o $@ $(filter %.cpp,$^) -L$(NATIVE_BUILD)/lib/Release \
 		-lsdk -lsdk_hosting -lsdk_common -lbase -lpluginterfaces -framework CoreFoundation
 
