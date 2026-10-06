@@ -9,6 +9,15 @@
 static uint8_t note_to_gates[128];
 static uint8_t midi_channel = 9;
 static const uint8_t default_notes[NUM_GATES] = {60, 61, 62, 63, 64, 65, 66, 67};
+static const uint8_t note_map_magic = 0xA8;
+
+static void load_notes(const uint8_t* notes) {
+  for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
+    if (notes[gate] < 128) {
+      note_to_gates[notes[gate]] |= (uint8_t)(1 << gate);
+    }
+  }
+}
 
 void midi_mapper_init(void) {
   midi_mapper_load();
@@ -38,17 +47,16 @@ void midi_mapper_load(void) {
 
   uint8_t notes[NUM_GATES];
   eeprom_read_block(notes, (uint8_t*)EEPROM_NOTEMAP_ADDR, NUM_GATES);
+  uint8_t magic = eeprom_read_byte((uint8_t*)EEPROM_NOTEMAP_MAGIC_ADDR);
 
-  if (notes[0] == 0xFF) {
+  if (magic == note_map_magic) {
+    load_notes(notes);
+  } else if (notes[0] == 0xFF) {
     for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
       note_to_gates[default_notes[gate]] |= (uint8_t)(1 << gate);
     }
   } else {
-    for (uint8_t gate = 0; gate < NUM_GATES; ++gate) {
-      if (notes[gate] < 128) {
-        note_to_gates[notes[gate]] |= (uint8_t)(1 << gate);
-      }
-    }
+    load_notes(notes);
   }
 }
 
@@ -61,6 +69,7 @@ void midi_mapper_save(void) {
   }
 
   eeprom_update_block(notes, (uint8_t*)EEPROM_NOTEMAP_ADDR, NUM_GATES);
+  eeprom_update_byte((uint8_t*)EEPROM_NOTEMAP_MAGIC_ADDR, note_map_magic);
 }
 
 uint8_t midi_mapper_get_channel(void) {
